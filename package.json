@@ -1,0 +1,17 @@
+{
+  "name": "stress-logger-web",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Web client for Stress Logger",
+  "author": "Jeremy Greer <jex.grizzle@gmail.com>",
+  "license": "ISC",
+  "type": "module",
+  "scripts": {
+    "start": "serve -l 3000 .",
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.1",
+    "serve": "^14.2.4"
+  }
+}

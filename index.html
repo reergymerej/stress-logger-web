@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Stress Logger</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <h1>Stress Logger</h1>
+
+  <form id="signin" hidden>
+    <p id="signin-error" class="error" hidden>Wrong password</p>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password">
+    <button>Sign in</button>
+  </form>
+
+  <main id="app" hidden>
+    <form id="log">
+      <label for="description">What stressed you?</label>
+      <input id="description" name="description" autocomplete="off">
+      <button>Log</button>
+    </form>
+
+    <ul id="stressors"></ul>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
