@@ -6,31 +6,37 @@ const USER = 'alice';
 const PASSWORD = 'secret';
 const basic = (user: string, password: string) => `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`;
 
-type Stressor = { id: string; description: string; timestamp: string; utcOffset?: string | null };
+type Stressor = { id: string; description: string; timestamp: string };
 
 // A stand-in for the API, so these tests don't depend on the server repo.
-async function fakeApi(page: Page, stressors: Stressor[] = []) {
-  const posts: unknown[] = [];
+type Counts = { byHour: number[]; byDayOfWeek: number[] };
+
+async function fakeApi(page: Page, stressors: Stressor[] = [], counts: Counts = { byHour: Array(24).fill(0), byDayOfWeek: Array(7).fill(0) }) {
+  const fake = { posts: [] as unknown[], counts };
+  const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type' };
+  await page.route(`${API}/counts`, async (route) => {
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+    if (route.request().headers().authorization !== basic(USER, PASSWORD)) return route.fulfill({ status: 401, headers });
+    return route.fulfill({ headers, json: fake.counts });
+  });
   await page.route(API, async (route) => {
     const req = route.request();
-    const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type' };
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     if (req.headers().authorization !== basic(USER, PASSWORD)) return route.fulfill({ status: 401, headers });
     if (req.method() === 'POST') {
       const body = req.postDataJSON();
-      posts.push(body);
+      fake.posts.push(body);
       const stressor = {
         id: randomUUID(),
         description: body.description,
         timestamp: new Date(body.timestamp ?? Date.now()).toISOString(),
-        utcOffset: body.timestamp?.slice(-6) ?? null,
       };
       stressors.unshift(stressor);
       return route.fulfill({ status: 201, headers, json: stressor });
     }
     return route.fulfill({ headers, json: stressors });
   });
-  return { posts };
+  return fake;
 }
 
 async function signIn(page: Page, password = PASSWORD, user = USER) {
@@ -162,51 +168,35 @@ test('fits the screen, with touch-friendly controls', async ({ page }) => {
 const bar = (page: Page, name: string) => page.getByRole('img', { name, exact: true });
 const fillHeight = async (page: Page, name: string) => (await bar(page, name).locator('.fill').boundingBox())!.height;
 
-test('counts stressors by local hour of day and day of week, using each one\'s UTC offset', async ({ page }) => {
-  await fakeApi(page, [
-    { id: '4', description: 'Deadline, Thursday 7:15 PM in Kolkata', timestamp: '2026-10-01T13:45:00Z', utcOffset: '+05:30' },
-    { id: '3', description: 'Late call, Thursday 9 PM in Chicago', timestamp: '2026-10-02T02:00:00Z', utcOffset: '-05:00' },
-    { id: '2', description: 'Standup, Thursday 8:45 AM in Chicago', timestamp: '2026-10-01T13:45:00Z', utcOffset: '-05:00' },
-    { id: '1', description: 'Traffic, Thursday 8:30 AM in Chicago', timestamp: '2026-10-01T13:30:00Z', utcOffset: '-05:00' },
-  ]);
+test('charts the counts by hour of day and day of week from the API', async ({ page }) => {
+  const byHour = Array(24).fill(0);
+  byHour[8] = 2;
+  byHour[21] = 1;
+  await fakeApi(page, [], { byHour, byDayOfWeek: [0, 0, 0, 0, 3, 0, 1] });
   await page.goto('/');
 
   await signIn(page);
 
   await expect(page.getByRole('heading', { name: 'By hour of day' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'By day of week' })).toBeVisible();
+  await expect(bar(page, '12 AM: 0')).toBeVisible();
   await expect(bar(page, '8 AM: 2')).toBeVisible();
+  await expect(bar(page, '12 PM: 0')).toBeVisible();
   await expect(bar(page, '9 PM: 1')).toBeVisible();
-  await expect(bar(page, '2 AM: 0')).toBeVisible();
-  await expect(bar(page, '7 PM: 1')).toBeVisible();
-  await expect(bar(page, '1 PM: 0')).toBeVisible();
   await expect(page.getByRole('img', { name: /^\d+ [AP]M: \d+$/ })).toHaveCount(24);
-  await expect(bar(page, 'Thursday: 4')).toBeVisible();
-  await expect(bar(page, 'Friday: 0')).toBeVisible();
+  await expect(bar(page, 'Sunday: 0')).toBeVisible();
+  await expect(bar(page, 'Thursday: 3')).toBeVisible();
+  await expect(bar(page, 'Saturday: 1')).toBeVisible();
   await expect(page.getByRole('img', { name: /day: \d+$/ })).toHaveCount(7);
   expect(await fillHeight(page, '8 AM: 2')).toBeCloseTo(2 * await fillHeight(page, '9 PM: 1'), 0);
 });
 
-test.describe('in New York', () => {
-  test.use({ timezoneId: 'America/New_York' });
-
-  test('counts stressors with no UTC offset in the browser\'s time zone', async ({ page }) => {
-    await fakeApi(page, [{ id: '1', description: 'Logged before offsets', timestamp: '2026-10-04T03:00:00Z', utcOffset: null }]);
-    await page.goto('/');
-
-    await signIn(page);
-
-    await expect(bar(page, '11 PM: 1')).toBeVisible();
-    await expect(bar(page, 'Saturday: 1')).toBeVisible();
-  });
-});
-
-test('patterns update after logging', async ({ page }) => {
-  await page.clock.setFixedTime(new Date('2026-10-01T13:30:00Z'));
-  await fakeApi(page);
+test('fetches the counts again after logging', async ({ page }) => {
+  const api = await fakeApi(page);
   await page.goto('/');
   await signIn(page);
   await expect(bar(page, 'Thursday: 0')).toBeVisible();
+  api.counts = { byHour: Array(24).fill(0), byDayOfWeek: [0, 0, 0, 0, 1, 0, 0] };
 
   await log(page, 'Traffic jam');
 

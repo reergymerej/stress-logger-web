@@ -28,17 +28,6 @@ function localTimestamp() {
 const hourName = (hour) => `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}`;
 const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-// When the stressor happened, on the clock where it was logged. Stressors logged
-// without a UTC offset fall back to this browser's time zone.
-function localTime({ timestamp, utcOffset }) {
-  const date = new Date(timestamp);
-  if (!utcOffset) return { hour: date.getHours(), day: date.getDay() };
-  const [hours, minutes] = utcOffset.slice(1).split(':').map(Number);
-  const sign = utcOffset[0] === '-' ? -1 : 1;
-  const shifted = new Date(date.getTime() + sign * (hours * 60 + minutes) * 60_000);
-  return { hour: shifted.getUTCHours(), day: shifted.getUTCDay() };
-}
-
 // A bar per bucket, labeled for screen readers with its name and count.
 function chart(element, counts, name, label) {
   const max = Math.max(1, ...counts);
@@ -62,20 +51,13 @@ function chart(element, counts, name, label) {
   }));
 }
 
-function showPatterns(stressors) {
-  const hours = Array(24).fill(0);
-  const weekdays = Array(7).fill(0);
-  for (const stressor of stressors) {
-    const { hour, day } = localTime(stressor);
-    hours[hour]++;
-    weekdays[day]++;
-  }
-  chart(byHour, hours, hourName, (hour) => (hour % 6 ? '' : hourName(hour).replace(' ', '').toLowerCase().slice(0, -1)));
-  chart(byDay, weekdays, (day) => days[day], (day) => days[day].slice(0, 3));
+function showCounts(counts) {
+  chart(byHour, counts.byHour, hourName, (hour) => (hour % 6 ? '' : hourName(hour).replace(' ', '').toLowerCase().slice(0, -1)));
+  chart(byDay, counts.byDayOfWeek, (day) => days[day], (day) => days[day].slice(0, 3));
 }
 
-async function api(options = {}) {
-  const res = await fetch(`${API_URL}/v1/stressors`, {
+async function api(path, options = {}) {
+  const res = await fetch(`${API_URL}/v1/${path}`, {
     ...options,
     headers: { ...options.headers, authorization: `Basic ${localStorage.getItem('credentials')}` },
   });
@@ -89,9 +71,12 @@ async function api(options = {}) {
 }
 
 async function load() {
-  const stressors = await (await api()).json();
+  const [stressors, counts] = await Promise.all([
+    api('stressors').then((res) => res.json()),
+    api('stressors/counts').then((res) => res.json()),
+  ]);
   show(true);
-  showPatterns(stressors);
+  showCounts(counts);
   list.replaceChildren(...stressors.map((stressor) => {
     const item = document.createElement('li');
     const time = document.createElement('time');
@@ -112,7 +97,7 @@ signin.addEventListener('submit', async (event) => {
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   if (!form.description.value.trim()) return;
-  await api({
+  await api('stressors', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ description: form.description.value, timestamp: localTimestamp() }),
