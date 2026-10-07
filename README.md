@@ -1,6 +1,6 @@
 # Stress Logger Web
 
-The web client for [Stress Logger](https://github.com/reergymerej/stress-logger): log what stresses you, then review the list. Plain HTML, CSS and JS, mobile-first, with no build step.
+The web client for [Stress Logger](https://github.com/reergymerej/stress-logger): log what stresses you, then review the list and counts by hour of day and day of week. Plain HTML, CSS and JS, mobile-first, with no build step.
 
 ## Run
 
