@@ -12,11 +12,12 @@ type Stressor = { id: string; description: string; timestamp: string };
 type Counts = { byHour: number[]; byDayOfWeek: number[] };
 
 async function fakeApi(page: Page, stressors: Stressor[] = [], counts: Counts = { byHour: Array(24).fill(0), byDayOfWeek: Array(7).fill(0) }) {
-  const fake = { posts: [] as unknown[], counts };
+  const fake = { posts: [] as unknown[], counts, countsStatus: 200 };
   const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type' };
   await page.route(`${API}/counts`, async (route) => {
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     if (route.request().headers().authorization !== basic(USER, PASSWORD)) return route.fulfill({ status: 401, headers });
+    if (fake.countsStatus !== 200) return route.fulfill({ status: fake.countsStatus, headers, json: { error: 'boom' } });
     return route.fulfill({ headers, json: fake.counts });
   });
   await page.route(API, async (route) => {
@@ -189,6 +190,18 @@ test('charts the counts by hour of day and day of week from the API', async ({ p
   await expect(bar(page, 'Saturday: 1')).toBeVisible();
   await expect(page.getByRole('img', { name: /day: \d+$/ })).toHaveCount(7);
   expect(await fillHeight(page, '8 AM: 2')).toBeCloseTo(2 * await fillHeight(page, '9 PM: 1'), 0);
+});
+
+test('still shows the list when the counts fail to load', async ({ page }) => {
+  const api = await fakeApi(page, [{ id: '1', description: 'Flight delayed', timestamp: '2026-10-01T13:30:00Z' }]);
+  api.countsStatus = 500;
+  await page.goto('/');
+
+  await signIn(page);
+
+  await expect(page.getByRole('listitem')).toContainText('Flight delayed');
+  await expect(page.getByText("Couldn't load the counts")).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'By hour of day' })).toBeHidden();
 });
 
 test('fetches the counts again after logging', async ({ page }) => {

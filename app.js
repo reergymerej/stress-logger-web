@@ -5,6 +5,8 @@ const form = document.getElementById('log');
 const list = document.getElementById('stressors');
 const byHour = document.getElementById('by-hour');
 const byDay = document.getElementById('by-day');
+const patterns = document.getElementById('patterns');
+const patternsError = document.getElementById('patterns-error');
 
 const timeFormat = { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' };
 
@@ -51,7 +53,11 @@ function chart(element, counts, name, label) {
   }));
 }
 
+// counts is null when they couldn't be loaded; the rest of the page still works.
 function showCounts(counts) {
+  patterns.hidden = !counts;
+  patternsError.hidden = !!counts;
+  if (!counts) return;
   chart(byHour, counts.byHour, hourName, (hour) => (hour % 6 ? '' : hourName(hour).replace(' ', '').toLowerCase().slice(0, -1)));
   chart(byDay, counts.byDayOfWeek, (day) => days[day], (day) => days[day].slice(0, 3));
 }
@@ -73,7 +79,7 @@ async function api(path, options = {}) {
 async function load() {
   const [stressors, counts] = await Promise.all([
     api('stressors').then((res) => res.json()),
-    api('stressors/counts').then((res) => res.json()),
+    api('stressors/counts').then((res) => (res.ok ? res.json() : null)),
   ]);
   show(true);
   showCounts(counts);
