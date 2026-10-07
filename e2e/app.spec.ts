@@ -202,3 +202,41 @@ test('fetches the counts again after logging', async ({ page }) => {
 
   await expect(bar(page, 'Thursday: 1')).toBeVisible();
 });
+
+test.describe('looks right', () => {
+  const byHour = Array(24).fill(0);
+  byHour[8] = 4;
+  byHour[9] = 2;
+  byHour[17] = 3;
+  byHour[22] = 1;
+  const counts = { byHour, byDayOfWeek: [1, 2, 3, 0, 2, 1, 1] };
+  const stressors = [
+    { id: '2', description: 'Car broke down on the way to work', timestamp: '2026-10-02T13:05:00Z' },
+    { id: '1', description: 'Flight delayed', timestamp: '2026-10-01T13:30:00Z' },
+  ];
+
+  test('signed out', async ({ page }) => {
+    await fakeApi(page);
+    await page.goto('/');
+
+    await expect(page).toHaveScreenshot('signed-out.png');
+  });
+
+  test('signed in, with stressors and counts', async ({ page }) => {
+    await fakeApi(page, stressors, counts);
+    await page.goto('/');
+    await signIn(page);
+    await expect(page.getByRole('listitem')).toHaveCount(2);
+
+    await expect(page).toHaveScreenshot('signed-in.png', { fullPage: true });
+  });
+
+  test('wrong password', async ({ page }) => {
+    await fakeApi(page);
+    await page.goto('/');
+    await signIn(page, 'wrong');
+    await expect(page.getByText('Wrong username or password')).toBeVisible();
+
+    await expect(page).toHaveScreenshot('wrong-password.png');
+  });
+});

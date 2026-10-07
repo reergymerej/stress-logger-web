@@ -8,7 +8,7 @@
   "type": "module",
   "scripts": {
     "start": "serve -l 3000 .",
-    "test": "playwright test"
+    "test": "sh scripts/test.sh"
   },
   "devDependencies": {
     "@playwright/test": "1.55.1",

@@ -10,10 +10,12 @@ export default defineConfig({
     locale: 'en-US',
     timezoneId: 'UTC',
   },
-  // Chromium only: Playwright's WebKit build doesn't run on macOS 12.
+  // Run through `npm test`, in Docker: Playwright's WebKit doesn't run on macOS 12.
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Chrome'] } },
     { name: 'mobile', use: { ...devices['Pixel 5'] } },
+    { name: 'safari', use: { ...devices['Desktop Safari'] } },
+    { name: 'iphone', use: { ...devices['iPhone 13'] } },
   ],
   webServer: {
     command: `serve -l ${port} .`,
