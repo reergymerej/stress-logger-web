@@ -2,8 +2,9 @@ import { test, expect, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 
 const API = 'https://stress-logger-reergymerej.fly.dev/v1/stressors';
+const USER = 'alice';
 const PASSWORD = 'secret';
-const basic = (password: string) => `Basic ${Buffer.from(`web:${password}`).toString('base64')}`;
+const basic = (user: string, password: string) => `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`;
 
 type Stressor = { id: string; description: string; timestamp: string };
 
@@ -14,7 +15,7 @@ async function fakeApi(page: Page, stressors: Stressor[] = []) {
     const req = route.request();
     const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type' };
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
-    if (req.headers().authorization !== basic(PASSWORD)) return route.fulfill({ status: 401, headers });
+    if (req.headers().authorization !== basic(USER, PASSWORD)) return route.fulfill({ status: 401, headers });
     if (req.method() === 'POST') {
       const body = req.postDataJSON();
       posts.push(body);
@@ -27,7 +28,8 @@ async function fakeApi(page: Page, stressors: Stressor[] = []) {
   return { posts };
 }
 
-async function signIn(page: Page, password = PASSWORD) {
+async function signIn(page: Page, password = PASSWORD, user = USER) {
+  await page.getByLabel('Username').fill(user);
   await page.getByLabel('Password').fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
 }
@@ -37,7 +39,7 @@ const log = async (page: Page, description: string) => {
   await page.getByRole('button', { name: 'Log' }).click();
 };
 
-test('asks for the password, then lists stressors newest first, in local time', async ({ page }) => {
+test('asks for a username and password, then lists stressors newest first, in local time', async ({ page }) => {
   await fakeApi(page, [
     { id: '2', description: 'Car broke down', timestamp: '2026-10-02T09:05:00Z' },
     { id: '1', description: 'Flight delayed', timestamp: '2026-10-01T13:30:00Z' },
@@ -53,7 +55,7 @@ test('asks for the password, then lists stressors newest first, in local time', 
   await expect(items.nth(1)).toContainText('Flight delayed');
 });
 
-test('remembers the password', async ({ page }) => {
+test('remembers the sign-in', async ({ page }) => {
   await fakeApi(page, [{ id: '1', description: 'Remembered', timestamp: '2026-10-01T13:30:00Z' }]);
   await page.goto('/');
   await signIn(page);
@@ -65,16 +67,21 @@ test('remembers the password', async ({ page }) => {
   await expect(page.getByLabel('Password')).toBeHidden();
 });
 
-test('asks again when the password is wrong', async ({ page }) => {
-  await fakeApi(page);
-  await page.goto('/');
+test.describe('asks again', () => {
+  for (const [what, password, user] of [['when the password is wrong', 'wrong', USER], ['for an unknown user', PASSWORD, 'bob']]) {
+    test(what, async ({ page }) => {
+      await fakeApi(page);
+      await page.goto('/');
 
-  await signIn(page, 'wrong');
+      await signIn(page, password, user);
 
-  await expect(page.getByText('Wrong password')).toBeVisible();
-  await expect(page.getByLabel('Password')).toBeVisible();
-  await expect(page.getByLabel('What stressed you?')).toBeHidden();
+      await expect(page.getByText('Wrong username or password')).toBeVisible();
+      await expect(page.getByLabel('Password')).toBeVisible();
+      await expect(page.getByLabel('What stressed you?')).toBeHidden();
+    });
+  }
 });
+
 
 test('logging a stressor shows it and clears the input', async ({ page }) => {
   const { posts } = await fakeApi(page);

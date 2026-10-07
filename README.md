@@ -26,7 +26,7 @@ Live at https://reergymerej.github.io/stress-logger-web/.
 ## Decisions
 
 - **Separate from the server,** in its own repo and deployed on its own. It talks to the API only through `/v1`.
-- **Auth:** the server uses basic auth, but browsers don't show their password prompt for cross-origin requests. So the page asks for the password, keeps it in `localStorage`, and asks again on a 401.
+- **Auth:** the server uses basic auth, but browsers don't show their password prompt for cross-origin requests. So the page asks for a username and password, keeps them in `localStorage`, and asks again on a 401.
 - **Tests mock the API** with Playwright's `page.route`, so they don't depend on the server.
 - **Playwright is pinned to 1.55.1,** the newest version that supports macOS 12, and runs Chromium only.
 - **Hosting:** GitHub Pages for now. The site is just static files, so it can move anywhere.

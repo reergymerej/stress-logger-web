@@ -11,7 +11,9 @@
   <h1>Stress Logger</h1>
 
   <form id="signin" hidden>
-    <p id="signin-error" class="error" hidden>Wrong password</p>
+    <p id="signin-error" class="error" hidden>Wrong username or password</p>
+    <label for="username">Username</label>
+    <input id="username" name="username" autocomplete="username" autocapitalize="none" autocorrect="off">
     <label for="password">Password</label>
     <input id="password" name="password" type="password" autocomplete="current-password">
     <button>Sign in</button>

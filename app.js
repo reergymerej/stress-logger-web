@@ -14,10 +14,10 @@ function show(signedIn) {
 async function api(options = {}) {
   const res = await fetch(`${API_URL}/v1/stressors`, {
     ...options,
-    headers: { ...options.headers, authorization: `Basic ${btoa(`web:${localStorage.getItem('password')}`)}` },
+    headers: { ...options.headers, authorization: `Basic ${localStorage.getItem('credentials')}` },
   });
   if (res.status === 401) {
-    localStorage.removeItem('password');
+    localStorage.removeItem('credentials');
     signinError.hidden = false;
     show(false);
     throw new Error('wrong password');
@@ -40,7 +40,7 @@ async function load() {
 
 signin.addEventListener('submit', async (event) => {
   event.preventDefault();
-  localStorage.setItem('password', signin.password.value);
+  localStorage.setItem('credentials', btoa(`${signin.username.value}:${signin.password.value}`));
   signin.reset();
   await load();
 });
@@ -57,5 +57,5 @@ form.addEventListener('submit', async (event) => {
   await load();
 });
 
-if (localStorage.getItem('password')) load();
+if (localStorage.getItem('credentials')) load();
 else show(false);
