@@ -19,7 +19,12 @@ async function fakeApi(page: Page, stressors: Stressor[] = []) {
     if (req.method() === 'POST') {
       const body = req.postDataJSON();
       posts.push(body);
-      const stressor = { id: randomUUID(), description: body.description, timestamp: new Date().toISOString() };
+      const stressor = {
+        id: randomUUID(),
+        description: body.description,
+        timestamp: new Date(body.timestamp ?? Date.now()).toISOString(),
+        utcOffset: body.timestamp?.slice(-6) ?? null,
+      };
       stressors.unshift(stressor);
       return route.fulfill({ status: 201, headers, json: stressor });
     }
@@ -152,4 +157,58 @@ test('fits the screen, with touch-friendly controls', async ({ page }) => {
   // Below 16px, iOS zooms in when the input is focused.
   const fontSize = await page.getByLabel('What stressed you?').evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   expect(fontSize).toBeGreaterThanOrEqual(16);
+});
+
+const bar = (page: Page, name: string) => page.getByRole('img', { name, exact: true });
+const fillHeight = async (page: Page, name: string) => (await bar(page, name).locator('.fill').boundingBox())!.height;
+
+test('counts stressors by local hour of day and day of week, using each one\'s UTC offset', async ({ page }) => {
+  await fakeApi(page, [
+    { id: '4', description: 'Deadline, Thursday 7:15 PM in Kolkata', timestamp: '2026-10-01T13:45:00Z', utcOffset: '+05:30' },
+    { id: '3', description: 'Late call, Thursday 9 PM in Chicago', timestamp: '2026-10-02T02:00:00Z', utcOffset: '-05:00' },
+    { id: '2', description: 'Standup, Thursday 8:45 AM in Chicago', timestamp: '2026-10-01T13:45:00Z', utcOffset: '-05:00' },
+    { id: '1', description: 'Traffic, Thursday 8:30 AM in Chicago', timestamp: '2026-10-01T13:30:00Z', utcOffset: '-05:00' },
+  ]);
+  await page.goto('/');
+
+  await signIn(page);
+
+  await expect(page.getByRole('heading', { name: 'By hour of day' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'By day of week' })).toBeVisible();
+  await expect(bar(page, '8 AM: 2')).toBeVisible();
+  await expect(bar(page, '9 PM: 1')).toBeVisible();
+  await expect(bar(page, '2 AM: 0')).toBeVisible();
+  await expect(bar(page, '7 PM: 1')).toBeVisible();
+  await expect(bar(page, '1 PM: 0')).toBeVisible();
+  await expect(page.getByRole('img', { name: /^\d+ [AP]M: \d+$/ })).toHaveCount(24);
+  await expect(bar(page, 'Thursday: 4')).toBeVisible();
+  await expect(bar(page, 'Friday: 0')).toBeVisible();
+  await expect(page.getByRole('img', { name: /day: \d+$/ })).toHaveCount(7);
+  expect(await fillHeight(page, '8 AM: 2')).toBeCloseTo(2 * await fillHeight(page, '9 PM: 1'), 0);
+});
+
+test.describe('in New York', () => {
+  test.use({ timezoneId: 'America/New_York' });
+
+  test('counts stressors with no UTC offset in the browser\'s time zone', async ({ page }) => {
+    await fakeApi(page, [{ id: '1', description: 'Logged before offsets', timestamp: '2026-10-04T03:00:00Z', utcOffset: null }]);
+    await page.goto('/');
+
+    await signIn(page);
+
+    await expect(bar(page, '11 PM: 1')).toBeVisible();
+    await expect(bar(page, 'Saturday: 1')).toBeVisible();
+  });
+});
+
+test('patterns update after logging', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-01T13:30:00Z'));
+  await fakeApi(page);
+  await page.goto('/');
+  await signIn(page);
+  await expect(bar(page, 'Thursday: 0')).toBeVisible();
+
+  await log(page, 'Traffic jam');
+
+  await expect(bar(page, 'Thursday: 1')).toBeVisible();
 });

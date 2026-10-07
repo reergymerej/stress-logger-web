@@ -3,6 +3,8 @@ const signinError = document.getElementById('signin-error');
 const app = document.getElementById('app');
 const form = document.getElementById('log');
 const list = document.getElementById('stressors');
+const byHour = document.getElementById('by-hour');
+const byDay = document.getElementById('by-day');
 
 const timeFormat = { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' };
 
@@ -23,6 +25,55 @@ function localTimestamp() {
   return `${date}T${time}${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
 }
 
+const hourName = (hour) => `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}`;
+const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+// When the stressor happened, on the clock where it was logged. Stressors logged
+// without a UTC offset fall back to this browser's time zone.
+function localTime({ timestamp, utcOffset }) {
+  const date = new Date(timestamp);
+  if (!utcOffset) return { hour: date.getHours(), day: date.getDay() };
+  const [hours, minutes] = utcOffset.slice(1).split(':').map(Number);
+  const sign = utcOffset[0] === '-' ? -1 : 1;
+  const shifted = new Date(date.getTime() + sign * (hours * 60 + minutes) * 60_000);
+  return { hour: shifted.getUTCHours(), day: shifted.getUTCDay() };
+}
+
+// A bar per bucket, labeled for screen readers with its name and count.
+function chart(element, counts, name, label) {
+  const max = Math.max(1, ...counts);
+  element.replaceChildren(...counts.map((count, i) => {
+    const bar = document.createElement('div');
+    bar.className = 'bar';
+    bar.setAttribute('role', 'img');
+    bar.setAttribute('aria-label', `${name(i)}: ${count}`);
+    const number = document.createElement('span');
+    number.textContent = count || '';
+    const fill = document.createElement('div');
+    fill.className = 'fill';
+    fill.style.height = `${(count / max) * 100}%`;
+    const track = document.createElement('div');
+    track.className = 'track';
+    track.append(fill);
+    const axis = document.createElement('span');
+    axis.textContent = label(i);
+    bar.append(number, track, axis);
+    return bar;
+  }));
+}
+
+function showPatterns(stressors) {
+  const hours = Array(24).fill(0);
+  const weekdays = Array(7).fill(0);
+  for (const stressor of stressors) {
+    const { hour, day } = localTime(stressor);
+    hours[hour]++;
+    weekdays[day]++;
+  }
+  chart(byHour, hours, hourName, (hour) => (hour % 6 ? '' : hourName(hour).replace(' ', '').toLowerCase().slice(0, -1)));
+  chart(byDay, weekdays, (day) => days[day], (day) => days[day].slice(0, 3));
+}
+
 async function api(options = {}) {
   const res = await fetch(`${API_URL}/v1/stressors`, {
     ...options,
@@ -40,6 +91,7 @@ async function api(options = {}) {
 async function load() {
   const stressors = await (await api()).json();
   show(true);
+  showPatterns(stressors);
   list.replaceChildren(...stressors.map((stressor) => {
     const item = document.createElement('li');
     const time = document.createElement('time');
