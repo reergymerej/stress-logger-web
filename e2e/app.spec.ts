@@ -6,7 +6,7 @@ const USER = 'alice';
 const PASSWORD = 'secret';
 const basic = (user: string, password: string) => `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`;
 
-type Stressor = { id: string; description: string; timestamp: string };
+type Stressor = { id: string; description: string; timestamp: string; utcOffset?: string | null };
 
 // A stand-in for the API, so these tests don't depend on the server repo.
 async function fakeApi(page: Page, stressors: Stressor[] = []) {
@@ -92,8 +92,30 @@ test('logging a stressor shows it and clears the input', async ({ page }) => {
 
   await expect(page.getByRole('listitem')).toContainText('Traffic jam');
   await expect(page.getByLabel('What stressed you?')).toHaveValue('');
-  expect(posts).toEqual([{ description: 'Traffic jam' }]);
+  expect(posts).toMatchObject([{ description: 'Traffic jam' }]);
 });
+
+for (const [timezoneId, timestamp] of [
+  ['America/Chicago', '2026-10-01T08:30:05-05:00'],
+  ['Asia/Kolkata', '2026-10-01T19:00:05+05:30'],
+  ['UTC', '2026-10-01T13:30:05+00:00'],
+]) {
+  test.describe(`in ${timezoneId}`, () => {
+    test.use({ timezoneId });
+
+    test('logging sends the local time, with its UTC offset', async ({ page }) => {
+      await page.clock.setFixedTime(new Date('2026-10-01T13:30:05Z'));
+      const { posts } = await fakeApi(page);
+      await page.goto('/');
+      await signIn(page);
+
+      await log(page, 'Late for standup');
+
+      await expect(page.getByRole('listitem')).toContainText('Late for standup');
+      expect(posts).toEqual([{ description: 'Late for standup', timestamp }]);
+    });
+  });
+}
 
 test('blank descriptions are not logged', async ({ page }) => {
   const { posts } = await fakeApi(page);

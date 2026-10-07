@@ -11,6 +11,18 @@ function show(signedIn) {
   app.hidden = !signedIn;
 }
 
+const pad = (n) => String(n).padStart(2, '0');
+
+// The current time in ISO 8601 with the local UTC offset, like 2026-10-01T08:30:05-05:00.
+function localTimestamp() {
+  const now = new Date();
+  const offset = -now.getTimezoneOffset();
+  const sign = offset < 0 ? '-' : '+';
+  const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  return `${date}T${time}${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
+}
+
 async function api(options = {}) {
   const res = await fetch(`${API_URL}/v1/stressors`, {
     ...options,
@@ -51,7 +63,7 @@ form.addEventListener('submit', async (event) => {
   await api({
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ description: form.description.value }),
+    body: JSON.stringify({ description: form.description.value, timestamp: localTimestamp() }),
   });
   form.reset();
   await load();
