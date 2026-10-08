@@ -89,7 +89,25 @@ button.delete {
 
 h2 { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.5rem; }
 
-#patterns { margin-bottom: 1.5rem; }
+#patterns { margin-bottom: 1rem; }
+
+summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+}
+
+summary::-webkit-details-marker { display: none; }
+
+summary::before { content: '▸'; color: var(--muted); }
+
+#patterns[open] summary::before { content: '▾'; }
+
+#patterns[open] summary { margin-bottom: 0.5rem; }
 
 .chart {
   display: flex;

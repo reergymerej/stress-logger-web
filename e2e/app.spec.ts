@@ -309,6 +309,20 @@ test('fits the screen, with touch-friendly controls', async ({ page }) => {
 });
 
 const bar = (page: Page, name: string) => page.getByRole('img', { name, exact: true });
+const openPatterns = (page: Page) => page.getByText('Patterns', { exact: true }).click();
+
+test('keeps the counts tucked away under Patterns until opened', async ({ page }) => {
+  await fakeApi(page);
+  await page.goto('/');
+  await signIn(page);
+  await expect(page.getByLabel('What stressed you?')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'By hour of day' })).toBeHidden();
+
+  await openPatterns(page);
+
+  await expect(page.getByRole('heading', { name: 'By hour of day' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'By day of week' })).toBeVisible();
+});
 const fillHeight = async (page: Page, name: string) => (await bar(page, name).locator('.fill').boundingBox())!.height;
 
 test('charts the counts by hour of day and day of week from the API', async ({ page }) => {
@@ -319,9 +333,8 @@ test('charts the counts by hour of day and day of week from the API', async ({ p
   await page.goto('/');
 
   await signIn(page);
+  await openPatterns(page);
 
-  await expect(page.getByRole('heading', { name: 'By hour of day' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'By day of week' })).toBeVisible();
   await expect(bar(page, '12 AM: 0')).toBeVisible();
   await expect(bar(page, '8 AM: 2')).toBeVisible();
   await expect(bar(page, '12 PM: 0')).toBeVisible();
@@ -350,6 +363,7 @@ test('fetches the counts again after logging', async ({ page }) => {
   const api = await fakeApi(page);
   await page.goto('/');
   await signIn(page);
+  await openPatterns(page);
   await expect(bar(page, 'Thursday: 0')).toBeVisible();
   api.counts = { byHour: Array(24).fill(0), byDayOfWeek: [0, 0, 0, 0, 1, 0, 0] };
 
@@ -384,6 +398,16 @@ test.describe('looks right', () => {
     await expect(page.getByRole('listitem')).toHaveCount(2);
 
     await expect(page).toHaveScreenshot('signed-in.png', { fullPage: true });
+  });
+
+  test('signed in, with Patterns open', async ({ page }) => {
+    await fakeApi(page, stressors, counts);
+    await page.goto('/');
+    await signIn(page);
+    await expect(page.getByRole('listitem')).toHaveCount(2);
+    await openPatterns(page);
+
+    await expect(page).toHaveScreenshot('patterns-open.png', { fullPage: true });
   });
 
   test('cannot reach the server', async ({ page }) => {
