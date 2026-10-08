@@ -13,13 +13,25 @@ type Counts = { byHour: number[]; byDayOfWeek: number[] };
 
 async function fakeApi(page: Page, stressors: Stressor[] = [], counts: Counts = { byHour: Array(24).fill(0), byDayOfWeek: Array(7).fill(0) }) {
   // Set hold to a promise to keep POSTs waiting until it resolves.
-  const fake = { posts: [] as unknown[], counts, countsStatus: 200, hold: null as Promise<void> | null };
+  const fake = { posts: [] as unknown[], deletes: [] as string[], counts, countsStatus: 200, hold: null as Promise<void> | null };
   const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type' };
   await page.route(`${API}/counts`, async (route) => {
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     if (route.request().headers().authorization !== basic(USER, PASSWORD)) return route.fulfill({ status: 401, headers });
     if (fake.countsStatus !== 200) return route.fulfill({ status: fake.countsStatus, headers, json: { error: 'boom' } });
     return route.fulfill({ headers, json: fake.counts });
+  });
+  const oneStressor = (url: URL) => url.href.startsWith(`${API}/`) && url.href !== `${API}/counts`;
+  await page.route(oneStressor, async (route) => {
+    const req = route.request();
+    if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+    if (req.headers().authorization !== basic(USER, PASSWORD)) return route.fulfill({ status: 401, headers });
+    const id = req.url().slice(`${API}/`.length);
+    const index = stressors.findIndex((s) => s.id === id);
+    if (req.method() !== 'DELETE' || index === -1) return route.fulfill({ status: 404, headers });
+    fake.deletes.push(id);
+    stressors.splice(index, 1);
+    return route.fulfill({ status: 204, headers });
   });
   await page.route(API, async (route) => {
     const req = route.request();
@@ -173,6 +185,60 @@ test('logging shows it is busy and ignores more submits until done', async ({ pa
   await expect(button).toBeEnabled();
   await expect(button).toHaveText('Log');
   expect(api.posts).toHaveLength(1);
+});
+
+test.describe('deleting', () => {
+  const stressors = () => [
+    { id: 'keep', description: 'Keep me', timestamp: '2026-10-02T13:30:00Z' },
+    { id: 'oops', description: 'Logged by mistake', timestamp: '2026-10-01T13:30:00Z' },
+  ];
+  const deleteButton = (page: Page, description: string) =>
+    page.getByRole('listitem').filter({ hasText: description }).getByRole('button', { name: 'Delete' });
+
+  test('deletes a stressor after confirming', async ({ page }) => {
+    const api = await fakeApi(page, stressors());
+    await page.goto('/');
+    await signIn(page);
+    let message = '';
+    page.once('dialog', (dialog) => {
+      message = dialog.message();
+      dialog.accept();
+    });
+
+    await deleteButton(page, 'Logged by mistake').click();
+
+    await expect(page.getByRole('listitem')).toHaveCount(1);
+    await expect(page.getByRole('listitem')).toContainText('Keep me');
+    expect(message).toBe('Delete "Logged by mistake"?');
+    expect(api.deletes).toEqual(['oops']);
+  });
+
+  test('keeps the stressor when not confirmed', async ({ page }) => {
+    const api = await fakeApi(page, stressors());
+    await page.goto('/');
+    await signIn(page);
+    page.once('dialog', (dialog) => dialog.dismiss());
+
+    await deleteButton(page, 'Logged by mistake').click();
+
+    await expect(page.getByRole('listitem')).toHaveCount(2);
+    expect(api.deletes).toEqual([]);
+  });
+
+  test('asks about a stressor with no details by its time', async ({ page }) => {
+    await fakeApi(page, [{ id: 'blank', description: null, timestamp: '2026-10-01T13:30:00Z' }]);
+    await page.goto('/');
+    await signIn(page);
+    let message = '';
+    page.once('dialog', (dialog) => {
+      message = dialog.message();
+      dialog.dismiss();
+    });
+
+    await deleteButton(page, 'No details').click();
+
+    await expect.poll(() => message).toBe('Delete the stressor from 10/1/2026, 1:30 PM?');
+  });
 });
 
 test('descriptions are shown as text, not HTML', async ({ page }) => {

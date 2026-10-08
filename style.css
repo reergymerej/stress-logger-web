@@ -65,9 +65,22 @@ button {
 ul { list-style: none; margin: 0; padding: 0; }
 
 li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   padding: 0.75rem 0;
   border-bottom: 1px solid var(--border);
   overflow-wrap: anywhere;
+}
+
+li > div { flex: 1; min-width: 0; }
+
+button.delete {
+  padding: 0 0.75rem;
+  background: transparent;
+  color: var(--muted);
+  font-weight: normal;
+  border: 1px solid var(--border);
 }
 
 h2 { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.5rem; }

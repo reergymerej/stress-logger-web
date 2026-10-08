@@ -86,17 +86,28 @@ async function load() {
   showCounts(counts);
   list.replaceChildren(...stressors.map((stressor) => {
     const item = document.createElement('li');
+    const entry = document.createElement('div');
     const time = document.createElement('time');
     time.dateTime = stressor.timestamp;
     time.textContent = new Date(stressor.timestamp).toLocaleString(undefined, timeFormat);
     if (stressor.description) {
-      item.append(time, stressor.description);
+      entry.append(time, stressor.description);
     } else {
       const none = document.createElement('span');
       none.className = 'none';
       none.textContent = 'No details';
-      item.append(time, none);
+      entry.append(time, none);
     }
+    const remove = document.createElement('button');
+    remove.className = 'delete';
+    remove.textContent = 'Delete';
+    remove.addEventListener('click', async () => {
+      const what = stressor.description ? `"${stressor.description}"` : `the stressor from ${time.textContent}`;
+      if (!confirm(`Delete ${what}?`)) return;
+      await api(`stressors/${stressor.id}`, { method: 'DELETE' });
+      await load();
+    });
+    item.append(entry, remove);
     return item;
   }));
 }
