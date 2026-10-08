@@ -12,7 +12,8 @@ type Stressor = { id: string; description: string | null; timestamp: string };
 type Counts = { byHour: number[]; byDayOfWeek: number[] };
 
 async function fakeApi(page: Page, stressors: Stressor[] = [], counts: Counts = { byHour: Array(24).fill(0), byDayOfWeek: Array(7).fill(0) }) {
-  const fake = { posts: [] as unknown[], counts, countsStatus: 200 };
+  // Set hold to a promise to keep POSTs waiting until it resolves.
+  const fake = { posts: [] as unknown[], counts, countsStatus: 200, hold: null as Promise<void> | null };
   const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type' };
   await page.route(`${API}/counts`, async (route) => {
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
@@ -27,6 +28,7 @@ async function fakeApi(page: Page, stressors: Stressor[] = [], counts: Counts = 
     if (req.method() === 'POST') {
       const body = req.postDataJSON();
       fake.posts.push(body);
+      await fake.hold;
       const stressor = {
         id: randomUUID(),
         description: body.description?.trim() ? body.description : null,
@@ -151,6 +153,26 @@ test('lists stressors without a description as having no details', async ({ page
 
   await expect(page.getByRole('listitem')).toContainText('10/1/2026, 1:30 PM');
   await expect(page.getByRole('listitem')).toContainText('No details');
+});
+
+test('logging shows it is busy and ignores more submits until done', async ({ page }) => {
+  const api = await fakeApi(page);
+  let release = () => {};
+  api.hold = new Promise((resolve) => (release = resolve));
+  await page.goto('/');
+  await signIn(page);
+  const button = page.locator('#log button');
+
+  await log(page, 'Traffic jam');
+  await expect(button).toBeDisabled();
+  await expect(button).toHaveText('Logging…');
+  await page.locator('#log').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  release();
+
+  await expect(page.getByRole('listitem')).toContainText('Traffic jam');
+  await expect(button).toBeEnabled();
+  await expect(button).toHaveText('Log');
+  expect(api.posts).toHaveLength(1);
 });
 
 test('descriptions are shown as text, not HTML', async ({ page }) => {

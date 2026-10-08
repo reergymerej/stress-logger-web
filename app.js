@@ -2,6 +2,7 @@ const signin = document.getElementById('signin');
 const signinError = document.getElementById('signin-error');
 const app = document.getElementById('app');
 const form = document.getElementById('log');
+const logButton = form.querySelector('button');
 const list = document.getElementById('stressors');
 const byHour = document.getElementById('by-hour');
 const byDay = document.getElementById('by-day');
@@ -109,16 +110,25 @@ signin.addEventListener('submit', async (event) => {
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  await api('stressors', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    // A stressor without details is still worth logging.
-    body: JSON.stringify(form.description.value.trim()
-      ? { description: form.description.value, timestamp: localTimestamp() }
-      : { timestamp: localTimestamp() }),
-  });
-  form.reset();
-  await load();
+  // One log at a time, so a double tap doesn't log twice.
+  if (logButton.disabled) return;
+  logButton.disabled = true;
+  logButton.textContent = 'Logging…';
+  try {
+    await api('stressors', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      // A stressor without details is still worth logging.
+      body: JSON.stringify(form.description.value.trim()
+        ? { description: form.description.value, timestamp: localTimestamp() }
+        : { timestamp: localTimestamp() }),
+    });
+    form.reset();
+    await load();
+  } finally {
+    logButton.disabled = false;
+    logButton.textContent = 'Log';
+  }
 });
 
 if (localStorage.getItem('credentials')) load();
