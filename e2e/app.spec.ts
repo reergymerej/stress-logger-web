@@ -6,7 +6,7 @@ const USER = 'alice';
 const PASSWORD = 'secret';
 const basic = (user: string, password: string) => `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`;
 
-type Stressor = { id: string; description: string; timestamp: string };
+type Stressor = { id: string; description: string | null; timestamp: string };
 
 // A stand-in for the API, so these tests don't depend on the server repo.
 type Counts = { byHour: number[]; byDayOfWeek: number[] };
@@ -29,7 +29,7 @@ async function fakeApi(page: Page, stressors: Stressor[] = [], counts: Counts = 
       fake.posts.push(body);
       const stressor = {
         id: randomUUID(),
-        description: body.description,
+        description: body.description?.trim() ? body.description : null,
         timestamp: new Date(body.timestamp ?? Date.now()).toISOString(),
       };
       stressors.unshift(stressor);
@@ -129,16 +129,28 @@ for (const [timezoneId, timestamp] of [
   });
 }
 
-test('blank descriptions are not logged', async ({ page }) => {
-  const { posts } = await fakeApi(page);
+for (const [what, description] of [['an empty', ''], ['a blank', '   ']]) {
+  test(`logging with ${what} description logs a stressor with no details`, async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-01T13:30:05Z'));
+    const { posts } = await fakeApi(page);
+    await page.goto('/');
+    await signIn(page);
+
+    await log(page, description);
+
+    await expect(page.getByRole('listitem')).toContainText('No details');
+    expect(posts).toEqual([{ timestamp: '2026-10-01T13:30:05+00:00' }]);
+  });
+}
+
+test('lists stressors without a description as having no details', async ({ page }) => {
+  await fakeApi(page, [{ id: '1', description: null, timestamp: '2026-10-01T13:30:00Z' }]);
   await page.goto('/');
+
   await signIn(page);
-  await expect(page.getByLabel('What stressed you?')).toBeVisible();
 
-  await log(page, '   ');
-  await page.waitForLoadState('networkidle');
-
-  expect(posts).toEqual([]);
+  await expect(page.getByRole('listitem')).toContainText('10/1/2026, 1:30 PM');
+  await expect(page.getByRole('listitem')).toContainText('No details');
 });
 
 test('descriptions are shown as text, not HTML', async ({ page }) => {

@@ -88,7 +88,14 @@ async function load() {
     const time = document.createElement('time');
     time.dateTime = stressor.timestamp;
     time.textContent = new Date(stressor.timestamp).toLocaleString(undefined, timeFormat);
-    item.append(time, stressor.description);
+    if (stressor.description) {
+      item.append(time, stressor.description);
+    } else {
+      const none = document.createElement('span');
+      none.className = 'none';
+      none.textContent = 'No details';
+      item.append(time, none);
+    }
     return item;
   }));
 }
@@ -102,11 +109,13 @@ signin.addEventListener('submit', async (event) => {
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
-  if (!form.description.value.trim()) return;
   await api('stressors', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ description: form.description.value, timestamp: localTimestamp() }),
+    // A stressor without details is still worth logging.
+    body: JSON.stringify(form.description.value.trim()
+      ? { description: form.description.value, timestamp: localTimestamp() }
+      : { timestamp: localTimestamp() }),
   });
   form.reset();
   await load();

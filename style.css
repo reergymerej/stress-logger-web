@@ -106,4 +106,6 @@ h2 { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.5rem; }
   border-radius: 2px 2px 0 0;
 }
 
+li .none { color: var(--muted); font-style: italic; }
+
 time { display: block; font-size: 0.85rem; color: var(--muted); }
