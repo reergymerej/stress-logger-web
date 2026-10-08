@@ -9,6 +9,8 @@ export default defineConfig({
     baseURL: `http://localhost:${port}`,
     locale: 'en-US',
     timezoneId: 'UTC',
+    // For tests that fail only now and then: open with `npx playwright show-trace`.
+    trace: 'retain-on-failure',
   },
   // Run through `npm test`, in Docker: Playwright's WebKit doesn't run on macOS 12.
   projects: [
