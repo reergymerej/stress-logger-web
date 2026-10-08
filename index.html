@@ -10,6 +10,13 @@
 <body>
   <h1>Stress Logger</h1>
 
+  <p id="loading" role="status" hidden>Loading… The server can take a few seconds to wake up.</p>
+
+  <div id="unreachable" hidden>
+    <p class="error">Couldn't reach the server.</p>
+    <button id="retry">Try again</button>
+  </div>
+
   <form id="signin" hidden>
     <p id="signin-error" class="error" hidden>Wrong username or password</p>
     <label for="username">Username</label>

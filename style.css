@@ -60,6 +60,10 @@ button {
 
 .error { color: var(--error); margin: 0; }
 
+#loading { color: var(--muted); }
+
+#unreachable { display: flex; flex-direction: column; gap: 0.5rem; }
+
 #patterns-error { margin-bottom: 1.5rem; }
 
 ul { list-style: none; margin: 0; padding: 0; }

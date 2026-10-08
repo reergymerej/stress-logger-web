@@ -1,6 +1,8 @@
 const signin = document.getElementById('signin');
 const signinError = document.getElementById('signin-error');
 const app = document.getElementById('app');
+const loading = document.getElementById('loading');
+const unreachable = document.getElementById('unreachable');
 const form = document.getElementById('log');
 const logButton = form.querySelector('button');
 const list = document.getElementById('stressors');
@@ -14,7 +16,12 @@ const timeFormat = { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'n
 function show(signedIn) {
   signin.hidden = signedIn;
   app.hidden = !signedIn;
+  loading.hidden = true;
+  unreachable.hidden = true;
 }
+
+// Thrown after a 401, once the sign-in form is showing again.
+class SignedOut extends Error {}
 
 const pad = (n) => String(n).padStart(2, '0');
 
@@ -72,16 +79,30 @@ async function api(path, options = {}) {
     localStorage.removeItem('credentials');
     signinError.hidden = false;
     show(false);
-    throw new Error('wrong password');
+    throw new SignedOut();
   }
   return res;
 }
 
 async function load() {
-  const [stressors, counts] = await Promise.all([
-    api('stressors').then((res) => res.json()),
-    api('stressors/counts').then((res) => (res.ok ? res.json() : null)),
-  ]);
+  // The server stops when idle, and waking it up can take a few seconds.
+  if (app.hidden) {
+    signin.hidden = true;
+    unreachable.hidden = true;
+    loading.hidden = false;
+  }
+  let stressors, counts;
+  try {
+    [stressors, counts] = await Promise.all([
+      api('stressors').then((res) => res.json()),
+      api('stressors/counts').then((res) => (res.ok ? res.json() : null)),
+    ]);
+  } catch (error) {
+    if (error instanceof SignedOut) return;
+    loading.hidden = true;
+    unreachable.hidden = false;
+    return;
+  }
   show(true);
   showCounts(counts);
   list.replaceChildren(...stressors.map((stressor) => {
@@ -141,6 +162,8 @@ form.addEventListener('submit', async (event) => {
     logButton.textContent = 'Log';
   }
 });
+
+document.getElementById('retry').addEventListener('click', load);
 
 if (localStorage.getItem('credentials')) load();
 else show(false);

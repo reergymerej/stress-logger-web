@@ -12,10 +12,19 @@ type Stressor = { id: string; description: string | null; timestamp: string };
 type Counts = { byHour: number[]; byDayOfWeek: number[] };
 
 async function fakeApi(page: Page, stressors: Stressor[] = [], counts: Counts = { byHour: Array(24).fill(0), byDayOfWeek: Array(7).fill(0) }) {
-  // Set hold to a promise to keep POSTs waiting until it resolves.
-  const fake = { posts: [] as unknown[], deletes: [] as string[], counts, countsStatus: 200, hold: null as Promise<void> | null };
+  // hold keeps POSTs waiting until it resolves, and listHold the list. down makes the server unreachable.
+  const fake = {
+    posts: [] as unknown[],
+    deletes: [] as string[],
+    counts,
+    countsStatus: 200,
+    hold: null as Promise<void> | null,
+    listHold: null as Promise<void> | null,
+    down: false,
+  };
   const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type' };
   await page.route(`${API}/counts`, async (route) => {
+    if (fake.down) return route.abort('connectionrefused');
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     if (route.request().headers().authorization !== basic(USER, PASSWORD)) return route.fulfill({ status: 401, headers });
     if (fake.countsStatus !== 200) return route.fulfill({ status: fake.countsStatus, headers, json: { error: 'boom' } });
@@ -34,6 +43,7 @@ async function fakeApi(page: Page, stressors: Stressor[] = [], counts: Counts = 
     return route.fulfill({ status: 204, headers });
   });
   await page.route(API, async (route) => {
+    if (fake.down) return route.abort('connectionrefused');
     const req = route.request();
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     if (req.headers().authorization !== basic(USER, PASSWORD)) return route.fulfill({ status: 401, headers });
@@ -49,6 +59,7 @@ async function fakeApi(page: Page, stressors: Stressor[] = [], counts: Counts = 
       stressors.unshift(stressor);
       return route.fulfill({ status: 201, headers, json: stressor });
     }
+    await fake.listHold;
     return route.fulfill({ headers, json: stressors });
   });
   return fake;
@@ -241,6 +252,37 @@ test.describe('deleting', () => {
   });
 });
 
+test('says it is loading until the stressors arrive, since the server can be slow to wake up', async ({ page }) => {
+  const api = await fakeApi(page, [{ id: '1', description: 'Flight delayed', timestamp: '2026-10-01T13:30:00Z' }]);
+  let release = () => {};
+  api.listHold = new Promise((resolve) => (release = resolve));
+  await page.goto('/');
+
+  await signIn(page);
+
+  const loading = page.getByRole('status');
+  await expect(loading).toHaveText('Loading… The server can take a few seconds to wake up.');
+  await expect(page.getByLabel('Password')).toBeHidden();
+  release();
+  await expect(page.getByRole('listitem')).toContainText('Flight delayed');
+  await expect(loading).toBeHidden();
+});
+
+test('says when it cannot reach the server, and tries again', async ({ page }) => {
+  const api = await fakeApi(page, [{ id: '1', description: 'Flight delayed', timestamp: '2026-10-01T13:30:00Z' }]);
+  api.down = true;
+  await page.goto('/');
+
+  await signIn(page);
+
+  await expect(page.getByText("Couldn't reach the server.")).toBeVisible();
+  await expect(page.getByRole('status')).toBeHidden();
+  api.down = false;
+  await page.getByRole('button', { name: 'Try again' }).click();
+  await expect(page.getByRole('listitem')).toContainText('Flight delayed');
+  await expect(page.getByText("Couldn't reach the server.")).toBeHidden();
+});
+
 test('descriptions are shown as text, not HTML', async ({ page }) => {
   await fakeApi(page);
   await page.goto('/');
@@ -342,6 +384,16 @@ test.describe('looks right', () => {
     await expect(page.getByRole('listitem')).toHaveCount(2);
 
     await expect(page).toHaveScreenshot('signed-in.png', { fullPage: true });
+  });
+
+  test('cannot reach the server', async ({ page }) => {
+    const api = await fakeApi(page);
+    api.down = true;
+    await page.goto('/');
+    await signIn(page);
+    await expect(page.getByText("Couldn't reach the server.")).toBeVisible();
+
+    await expect(page).toHaveScreenshot('unreachable.png');
   });
 
   test('wrong password', async ({ page }) => {
