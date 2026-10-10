@@ -17,6 +17,8 @@ async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { 
     posts: [] as unknown[],
     deletes: [] as string[],
     analyzed: [] as string[],
+    today: { status: 200, json: { positive: 0, negative: 0, neutral: 0 } as object },
+    todayDates: [] as string[],
     sentiment: { status: 200, json: { sentiment: 'negative' } as object },
     counts,
     countsStatus: 200,
@@ -49,6 +51,14 @@ async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { 
     fake.deletes.push(id);
     thoughts.splice(index, 1);
     return route.fulfill({ status: 204, headers });
+  });
+  // Registered after oneThought, so it wins for this path.
+  await page.route((url) => url.href.startsWith(`${API}/sentiment-counts?`), async (route) => {
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+    if (route.request().headers().authorization !== basic(USER, PASSWORD)) return route.fulfill({ status: 401, headers });
+    const date = new URL(route.request().url()).searchParams.get('date')!;
+    fake.todayDates.push(date);
+    return route.fulfill({ status: fake.today.status, headers, json: { date, ...fake.today.json } });
   });
   await page.route(API, async (route) => {
     if (fake.down) return route.abort('connectionrefused');
@@ -212,6 +222,43 @@ test('logging shows it is busy and ignores more submits until done', async ({ pa
   await expect(button).toBeEnabled();
   await expect(button).toHaveText('Log');
   expect(api.posts).toHaveLength(1);
+});
+
+test.describe("today's sentiment", () => {
+  test.use({ timezoneId: 'America/New_York' });
+
+  test("shows today's counts at the top, for the local day", async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-10T02:30:00Z')); // Still the 9th in New York.
+    const api = await fakeApi(page);
+    api.today.json = { positive: 1, negative: 2, neutral: 3 };
+    await page.goto('/');
+    await signIn(page);
+
+    await expect(page.locator('#today')).toHaveText('Today: 1 positive, 2 negative, 3 neutral');
+    expect(api.todayDates).toEqual(['2026-10-09']);
+  });
+
+  test('updates after analyzing a thought', async ({ page }) => {
+    const api = await fakeApi(page, [{ id: 'train', description: 'Missed the train', timestamp: '2026-10-02T13:30:00Z' }]);
+    await page.goto('/');
+    await signIn(page);
+    await expect(page.locator('#today')).toHaveText('Today: 0 positive, 0 negative, 0 neutral');
+
+    api.today.json = { positive: 0, negative: 1, neutral: 0 };
+    await page.getByRole('button', { name: 'Analyze' }).click();
+
+    await expect(page.locator('#today')).toHaveText('Today: 0 positive, 1 negative, 0 neutral');
+  });
+
+  test("leaves it out, and still shows the list, when today's counts fail to load", async ({ page }) => {
+    const api = await fakeApi(page, [{ id: 'train', description: 'Missed the train', timestamp: '2026-10-02T13:30:00Z' }]);
+    api.today = { status: 500, json: { error: 'boom' } };
+    await page.goto('/');
+    await signIn(page);
+
+    await expect(page.getByRole('listitem')).toContainText('Missed the train');
+    await expect(page.locator('#today')).toBeHidden();
+  });
 });
 
 test.describe('analyzing', () => {

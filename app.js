@@ -6,6 +6,7 @@ const unreachable = document.getElementById('unreachable');
 const form = document.getElementById('log');
 const logButton = form.querySelector('button');
 const list = document.getElementById('thoughts');
+const today = document.getElementById('today');
 const byHour = document.getElementById('by-hour');
 const byDay = document.getElementById('by-day');
 const patterns = document.getElementById('patterns');
@@ -84,6 +85,14 @@ async function api(path, options = {}) {
   return res;
 }
 
+// How today's analyzed thoughts went, in local time. Left out if it can't be loaded.
+async function showToday() {
+  const res = await api(`thoughts/sentiment-counts?date=${localTimestamp().slice(0, 10)}`);
+  const counts = res.ok ? await res.json() : null;
+  today.hidden = !counts;
+  if (counts) today.textContent = `Today: ${counts.positive} positive, ${counts.negative} negative, ${counts.neutral} neutral`;
+}
+
 async function load() {
   // The server stops when idle, and waking it up can take a few seconds.
   if (app.hidden) {
@@ -96,6 +105,7 @@ async function load() {
     [thoughts, counts] = await Promise.all([
       api('thoughts').then((res) => res.json()),
       api('thoughts/counts').then((res) => (res.ok ? res.json() : null)),
+      showToday(),
     ]);
   } catch (error) {
     if (error instanceof SignedOut) return;
@@ -137,7 +147,10 @@ async function load() {
       analyze.addEventListener('click', async () => {
         const res = await api(`thoughts/${thought.id}/sentiment`, { method: 'POST' });
         const body = await res.json();
-        if (res.ok) console.log(`"${thought.description}" is ${body.sentiment}`);
+        if (res.ok) {
+          console.log(`"${thought.description}" is ${body.sentiment}`);
+          await showToday();
+        }
         else console.error(`Couldn't analyze "${thought.description}": ${body.error}`);
       });
       item.append(analyze);

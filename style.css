@@ -145,3 +145,5 @@ summary::before { content: '▸'; color: var(--muted); }
 li .none { color: var(--muted); font-style: italic; }
 
 time { display: block; font-size: 0.85rem; color: var(--muted); }
+
+#today { margin: 0 0 1rem; color: var(--muted); }
