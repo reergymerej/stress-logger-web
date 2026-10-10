@@ -23,6 +23,8 @@ async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { 
     down: false,
   };
   const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type' };
+  // Anything else on the API host is a 404, so calling the wrong path fails fast instead of waiting on the network.
+  await page.route(`${new URL(API).origin}/**`, (route) => route.fulfill({ status: 404, headers }));
   await page.route(`${API}/counts`, async (route) => {
     if (fake.down) return route.abort('connectionrefused');
     if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
