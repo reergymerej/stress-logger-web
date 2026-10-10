@@ -34,12 +34,17 @@ const siteFiles = new Set(Object.values(files).map(([file]) => file));
 if (watching) {
   watch(root, (_, file) => {
     if (!siteFiles.has(file)) return;
+    console.log(`${time()} ${file} changed, reloading ${listeners.size} page${listeners.size === 1 ? '' : 's'}`);
     for (const res of listeners) res.write('data: reload\n\n');
   });
 }
 
+const time = () => new Date().toLocaleTimeString();
+
 createServer(async (req, res) => {
   const path = new URL(req.url, 'http://localhost').pathname;
+  res.on('finish', () => console.log(`${time()} ${req.method} ${path} ${res.statusCode}`));
+  if (watching && path === '/reload') console.log(`${time()} page listening for changes`);
   if (path === '/config.js') {
     res.writeHead(200, { 'content-type': 'text/javascript', 'cache-control': 'no-store' });
     return res.end(`// Where the Thought Logger API lives (set by npm start).\nconst API_URL = ${JSON.stringify(api)};\n`);
