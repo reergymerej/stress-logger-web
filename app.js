@@ -200,6 +200,8 @@ form.addEventListener('submit', async (event) => {
     logButton.textContent = 'Log';
   }
   logError.hidden = logged;
+  // Ready for the next thought, or to try this one again.
+  form.description.focus();
   if (!logged) return;
   pending = null;
   form.reset();

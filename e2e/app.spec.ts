@@ -189,6 +189,32 @@ test.describe('asks again', () => {
 });
 
 
+test.describe('after logging, focuses the input again, ready for the next one', () => {
+  test('once the thought is logged', async ({ page }) => {
+    await fakeApi(page);
+    await page.goto('/');
+    await signIn(page);
+
+    await log(page, 'Traffic jam');
+
+    await expect(page.getByRole('listitem')).toContainText('Traffic jam');
+    await expect(page.getByLabel("What's on your mind?")).toBeFocused();
+  });
+
+  test('when logging fails, with the text kept to try again', async ({ page }) => {
+    const api = await fakeApi(page);
+    await page.goto('/');
+    await signIn(page);
+    api.postFails = 500;
+
+    await log(page, 'Traffic jam');
+
+    await expect(page.getByText("Couldn't log it. Try again.")).toBeVisible();
+    await expect(page.getByLabel("What's on your mind?")).toBeFocused();
+    await expect(page.getByLabel("What's on your mind?")).toHaveValue('Traffic jam');
+  });
+});
+
 test('logging a thought shows it and clears the input', async ({ page }) => {
   const { posts } = await fakeApi(page);
   await page.goto('/');
