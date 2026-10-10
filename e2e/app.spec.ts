@@ -16,6 +16,8 @@ async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { 
   const fake = {
     posts: [] as unknown[],
     deletes: [] as string[],
+    analyzed: [] as string[],
+    sentiment: { status: 200, json: { sentiment: 'negative' } as object },
     counts,
     countsStatus: 200,
     hold: null as Promise<void> | null,
@@ -37,8 +39,12 @@ async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { 
     const req = route.request();
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     if (req.headers().authorization !== basic(USER, PASSWORD)) return route.fulfill({ status: 401, headers });
-    const id = req.url().slice(`${API}/`.length);
+    const [id, action] = req.url().slice(`${API}/`.length).split('/');
     const index = thoughts.findIndex((s) => s.id === id);
+    if (action === 'sentiment' && req.method() === 'POST' && index !== -1) {
+      fake.analyzed.push(id);
+      return route.fulfill({ status: fake.sentiment.status, headers, json: fake.sentiment.json });
+    }
     if (req.method() !== 'DELETE' || index === -1) return route.fulfill({ status: 404, headers });
     fake.deletes.push(id);
     thoughts.splice(index, 1);
@@ -206,6 +212,51 @@ test('logging shows it is busy and ignores more submits until done', async ({ pa
   await expect(button).toBeEnabled();
   await expect(button).toHaveText('Log');
   expect(api.posts).toHaveLength(1);
+});
+
+test.describe('analyzing', () => {
+  const thoughts = () => [
+    { id: 'train', description: 'Missed the train', timestamp: '2026-10-02T13:30:00Z' },
+    { id: 'blank', description: null, timestamp: '2026-10-01T13:30:00Z' },
+  ];
+  const consoleMessages = (page: Page) => {
+    const messages: string[] = [];
+    page.on('console', (message) => messages.push(`${message.type()}: ${message.text()}`));
+    return messages;
+  };
+
+  test("Analyze logs the thought's sentiment to the console", async ({ page }) => {
+    const api = await fakeApi(page, thoughts());
+    const messages = consoleMessages(page);
+    await page.goto('/');
+    await signIn(page);
+
+    await page.getByRole('listitem').filter({ hasText: 'Missed the train' }).getByRole('button', { name: 'Analyze' }).click();
+
+    await expect.poll(() => messages).toContain('log: "Missed the train" is negative');
+    expect(api.analyzed).toEqual(['train']);
+  });
+
+  test("logs why when it can't analyze", async ({ page }) => {
+    const api = await fakeApi(page, thoughts());
+    api.sentiment = { status: 503, json: { error: 'sentiment is not configured' } };
+    const messages = consoleMessages(page);
+    await page.goto('/');
+    await signIn(page);
+
+    await page.getByRole('button', { name: 'Analyze' }).click();
+
+    await expect.poll(() => messages).toContain('error: Couldn\'t analyze "Missed the train": sentiment is not configured');
+  });
+
+  test('a thought without details has nothing to analyze', async ({ page }) => {
+    await fakeApi(page, thoughts());
+    await page.goto('/');
+    await signIn(page);
+
+    await expect(page.getByRole('listitem')).toHaveCount(2);
+    await expect(page.getByRole('button', { name: 'Analyze' })).toHaveCount(1);
+  });
 });
 
 test.describe('deleting', () => {
