@@ -22,6 +22,9 @@ async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { 
     posts: [] as { id?: string; description?: string; timestamp?: string }[],
     postFails: null as null | 'down' | 'lost' | number,
     deletes: [] as string[],
+    // Sentiments set by hand, and the status the next ones answer with.
+    sentimentPuts: [] as { id: string; sentiment: string }[],
+    sentimentStatus: 200,
     today: { status: 200, json: { positive: 0, negative: 0, neutral: 0 } as object },
     todayDates: [] as string[],
     // What GET /analyses answers, by id, and the ids each poll asked for.
@@ -48,8 +51,16 @@ async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { 
     const req = route.request();
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     if (req.headers().authorization !== basic(USER, PASSWORD)) return route.fulfill({ status: 401, headers });
-    const [id] = req.url().slice(`${API}/`.length).split('/');
+    const [id, sub] = req.url().slice(`${API}/`.length).split('/');
     const index = thoughts.findIndex((s) => s.id === id);
+    if (sub === 'sentiment' && req.method() === 'PUT' && index !== -1) {
+      const { sentiment } = req.postDataJSON();
+      fake.sentimentPuts.push({ id, sentiment });
+      if (fake.sentimentStatus !== 200) return route.fulfill({ status: fake.sentimentStatus, headers, json: { error: 'boom' } });
+      thoughts[index].analysis = { sentiment };
+      return route.fulfill({ headers, json: { sentiment } });
+    }
+    if (sub) return route.fulfill({ status: 404, headers });
     if (req.method() !== 'DELETE' || index === -1) return route.fulfill({ status: 404, headers });
     fake.deletes.push(id);
     thoughts.splice(index, 1);
@@ -467,6 +478,86 @@ test.describe('waiting for analysis', () => {
   });
 });
 
+const sentimentOf = (page: Page, text: string) => page.getByRole('listitem').filter({ hasText: text }).getByLabel('Sentiment');
+
+test.describe("each thought's sentiment", () => {
+  test('shows it, or that the thought is still being analyzed', async ({ page }) => {
+    await fakeApi(page, [
+      { id: 'waiting', description: 'Waiting', timestamp: '2026-10-03T13:30:00Z', analysis: {} },
+      { id: 'done', description: 'Analyzed', timestamp: '2026-10-02T13:30:00Z', analysis: { sentiment: 'negative' } },
+      { id: 'blank', description: null, timestamp: '2026-10-01T13:30:00Z', analysis: {} },
+    ]);
+    await page.goto('/');
+    await signIn(page);
+
+    await expect(sentimentOf(page, 'Analyzed')).toHaveValue('negative');
+    await expect(sentimentOf(page, 'Analyzed').locator('option:checked')).toHaveText('Negative');
+    await expect(sentimentOf(page, 'Waiting').locator('option:checked')).toHaveText('Analyzing…');
+    // Without words, there's nothing to analyze.
+    await expect(sentimentOf(page, 'No details')).toHaveCount(0);
+  });
+
+  test('shows the analysis once it arrives', async ({ page }) => {
+    await page.clock.install();
+    const api = await fakeApi(page);
+    await page.goto('/');
+    await signIn(page);
+    await log(page, 'Missed the train');
+    await expect(sentimentOf(page, 'Missed the train').locator('option:checked')).toHaveText('Analyzing…');
+
+    api.analyses[api.posts[0].id!] = { sentiment: 'negative' };
+    await page.clock.runFor(5000);
+
+    await expect(sentimentOf(page, 'Missed the train')).toHaveValue('negative');
+  });
+
+  test("changing it saves it, and today's counts follow", async ({ page }) => {
+    const api = await fakeApi(page, [
+      { id: 'done', description: 'Analyzed', timestamp: '2026-10-02T13:30:00Z', analysis: { sentiment: 'negative' } },
+    ]);
+    await page.goto('/');
+    await signIn(page);
+    await expect(page.locator('#today')).toHaveText('Today: 0 positive, 0 negative, 0 neutral');
+    api.today.json = { positive: 1, negative: 0, neutral: 0 };
+
+    await sentimentOf(page, 'Analyzed').selectOption('positive');
+
+    await expect(page.locator('#today')).toHaveText('Today: 1 positive, 0 negative, 0 neutral');
+    expect(api.sentimentPuts).toEqual([{ id: 'done', sentiment: 'positive' }]);
+    await expect(sentimentOf(page, 'Analyzed')).toHaveValue('positive');
+  });
+
+  test('can be set before the analysis arrives, and is no longer waited on', async ({ page }) => {
+    await page.clock.install();
+    const api = await fakeApi(page, [
+      { id: 'waiting', description: 'Waiting', timestamp: '2026-10-03T13:30:00Z', analysis: {} },
+    ]);
+    await page.goto('/');
+    await signIn(page);
+
+    await sentimentOf(page, 'Waiting').selectOption('neutral');
+    await expect.poll(() => api.sentimentPuts).toEqual([{ id: 'waiting', sentiment: 'neutral' }]);
+    await page.clock.runFor(60_000);
+
+    await expect(sentimentOf(page, 'Waiting')).toHaveValue('neutral');
+    expect(api.analysisPolls).toEqual([]);
+  });
+
+  test("when saving fails, puts it back and says it couldn't", async ({ page }) => {
+    const api = await fakeApi(page, [
+      { id: 'done', description: 'Analyzed', timestamp: '2026-10-02T13:30:00Z', analysis: { sentiment: 'negative' } },
+    ]);
+    api.sentimentStatus = 500;
+    await page.goto('/');
+    await signIn(page);
+
+    await sentimentOf(page, 'Analyzed').selectOption('positive');
+
+    await expect(page.getByRole('listitem').filter({ hasText: 'Analyzed' })).toContainText("Couldn't change it");
+    await expect(sentimentOf(page, 'Analyzed')).toHaveValue('negative');
+  });
+});
+
 test.describe('deleting', () => {
   const thoughts = () => [
     { id: 'keep', description: 'Keep me', timestamp: '2026-10-02T13:30:00Z' },
@@ -649,8 +740,8 @@ test.describe('looks right', () => {
   byHour[22] = 1;
   const counts = { byHour, byDayOfWeek: [1, 2, 3, 0, 2, 1, 1] };
   const thoughts = [
-    { id: '2', description: 'Car broke down on the way to work', timestamp: '2026-10-02T13:05:00Z' },
-    { id: '1', description: 'Flight delayed', timestamp: '2026-10-01T13:30:00Z' },
+    { id: '2', description: 'Car broke down on the way to work', timestamp: '2026-10-02T13:05:00Z', analysis: { sentiment: 'negative' } },
+    { id: '1', description: 'Flight delayed', timestamp: '2026-10-01T13:30:00Z', analysis: {} },
   ];
 
   test('signed out', async ({ page }) => {

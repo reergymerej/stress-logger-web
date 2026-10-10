@@ -5,6 +5,8 @@
   --border: #ddd;
   --accent: #2f6fde;
   --error: #c62828;
+  --positive: #2e7d32;
+  --negative: #c62828;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -15,6 +17,8 @@
     --border: #333;
     --accent: #5b8ff0;
     --error: #ef5350;
+    --positive: #66bb6a;
+    --negative: #ef5350;
   }
 }
 
@@ -146,3 +150,23 @@ li .none { color: var(--muted); font-style: italic; }
 time { display: block; font-size: 0.85rem; color: var(--muted); }
 
 #today { margin: 0 0 1rem; color: var(--muted); }
+
+.sentiment-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.25rem; }
+
+select.sentiment {
+  min-height: 44px;
+  min-width: 8.5rem;
+  padding: 0 0.5rem;
+  font: inherit;
+  font-size: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+}
+
+select.sentiment[data-sentiment='positive'] { color: var(--positive); }
+
+select.sentiment[data-sentiment='negative'] { color: var(--negative); }
+
+.sentiment-row .error { font-size: 0.85rem; }

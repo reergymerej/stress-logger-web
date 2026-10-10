@@ -1,6 +1,6 @@
 # Thought Logger Web
 
-The web client for [Thought Logger](https://github.com/reergymerej/stress-logger): log your thoughts, then review the list and counts by hour of day and day of week. Plain HTML, CSS and JS, mobile-first, with no build step.
+The web client for [Thought Logger](https://github.com/reergymerej/stress-logger): log your thoughts, then review the list and counts by hour of day and day of week. Each thought shows its sentiment once the server has analyzed it, and you can change it when the analysis got it wrong. Plain HTML, CSS and JS, mobile-first, with no build step.
 
 ## Run
 

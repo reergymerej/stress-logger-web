@@ -113,9 +113,10 @@ async function showToday() {
 const POLL_MS = 5000;
 const POLL_TRIES = 12;
 let pollTimer;
+let waiting = [];
 function pollAnalyses(thoughts) {
   clearTimeout(pollTimer);
-  let waiting = thoughts
+  waiting = thoughts
     .filter((t) => t.description && t.analysis && Object.keys(t.analysis).length === 0)
     .map((t) => t.id)
     .slice(0, 100);
@@ -123,12 +124,15 @@ function pollAnalyses(thoughts) {
   const next = () => {
     if (waiting.length === 0 || tries++ >= POLL_TRIES) return;
     pollTimer = setTimeout(async () => {
+      // A sentiment set by hand meanwhile may have left nothing to wait for.
+      if (waiting.length === 0) return;
       try {
         const res = await api(`thoughts/analyses?ids=${waiting.join(',')}`);
         if (res.ok) {
           const analyses = await res.json();
           const arrived = waiting.filter((id) => Object.keys(analyses[id] ?? {}).length > 0);
           waiting = waiting.filter((id) => !arrived.includes(id));
+          for (const id of arrived) pickers.get(id)?.(analyses[id].sentiment);
           if (arrived.length > 0) await showToday();
         }
       } catch (error) {
@@ -138,6 +142,61 @@ function pollAnalyses(thoughts) {
     }, POLL_MS);
   };
   next();
+}
+
+const sentiments = { positive: 'Positive', negative: 'Negative', neutral: 'Neutral' };
+// Each listed thought's sentiment picker, by id, showing a sentiment when it's given one.
+const pickers = new Map();
+
+// Shows a thought's sentiment, or that it's still being analyzed. Picking another one saves it, for when the
+// analysis got it wrong, and puts the old one back if that fails.
+function sentimentPicker(thought) {
+  const select = document.createElement('select');
+  select.className = 'sentiment';
+  select.setAttribute('aria-label', 'Sentiment');
+  const analyzing = new Option('Analyzing…', '');
+  analyzing.disabled = true;
+  select.append(analyzing, ...Object.entries(sentiments).map(([value, name]) => new Option(name, value)));
+  const error = document.createElement('span');
+  error.className = 'error';
+  error.textContent = "Couldn't change it";
+  error.hidden = true;
+  let current;
+  const show = (sentiment) => {
+    current = sentiment;
+    if (sentiment) analyzing.remove();
+    select.value = sentiment ?? '';
+    select.dataset.sentiment = sentiment ?? '';
+  };
+  show(thought.analysis?.sentiment);
+  pickers.set(thought.id, show);
+  select.addEventListener('change', async () => {
+    const sentiment = select.value;
+    error.hidden = true;
+    let saved = false;
+    try {
+      const res = await api(`thoughts/${thought.id}/sentiment`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sentiment }),
+      });
+      saved = res.ok;
+    } catch (err) {
+      if (err instanceof SignedOut) return;
+    }
+    if (!saved) {
+      show(current);
+      error.hidden = false;
+      return;
+    }
+    show(sentiment);
+    waiting = waiting.filter((id) => id !== thought.id);
+    await showToday();
+  });
+  const row = document.createElement('div');
+  row.className = 'sentiment-row';
+  row.append(select, error);
+  return row;
 }
 
 async function load() {
@@ -165,6 +224,7 @@ async function load() {
   // Ready to type as soon as the app shows.
   if (appearing) form.description.focus();
   showCounts(counts);
+  pickers.clear();
   list.replaceChildren(...thoughts.map((thought) => {
     const item = document.createElement('li');
     const entry = document.createElement('div');
@@ -172,7 +232,7 @@ async function load() {
     time.dateTime = thought.timestamp;
     time.textContent = new Date(thought.timestamp).toLocaleString(undefined, timeFormat);
     if (thought.description) {
-      entry.append(time, thought.description);
+      entry.append(time, thought.description, sentimentPicker(thought));
     } else {
       const none = document.createElement('span');
       none.className = 'none';
