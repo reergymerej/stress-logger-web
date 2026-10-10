@@ -262,16 +262,18 @@ for (const [timezoneId, timestamp] of [
 }
 
 for (const [what, description] of [['an empty', ''], ['a blank', '   ']]) {
-  test(`logging with ${what} description logs a thought with no details`, async ({ page }) => {
-    await page.clock.setFixedTime(new Date('2026-10-01T13:30:05Z'));
+  test(`logging with ${what} description sends nothing: a thought needs words`, async ({ page }) => {
     const { posts } = await fakeApi(page);
     await page.goto('/');
     await signIn(page);
 
     await log(page, description);
+    await expect(page.getByLabel("What's on your mind?")).toBeFocused();
+    await log(page, 'Traffic jam');
 
-    await expect(page.getByRole('listitem')).toContainText('No details');
-    expect(posts).toEqual([{ id: expect.stringMatching(V7), timestamp: '2026-10-01T13:30:05+00:00' }]);
+    await expect(page.getByRole('listitem')).toHaveCount(1);
+    await expect(page.getByRole('listitem')).toContainText('Traffic jam');
+    expect(posts.map((post) => post.description)).toEqual(['Traffic jam']);
   });
 }
 

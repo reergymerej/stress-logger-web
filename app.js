@@ -210,13 +210,16 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
   // One log at a time, so a double tap doesn't log twice.
   if (logButton.disabled) return;
+  const text = form.description.value;
+  // A thought needs words, so there's something to analyze.
+  if (!text.trim()) {
+    form.description.focus();
+    return;
+  }
   logButton.disabled = true;
   logButton.textContent = 'Logging…';
-  const text = form.description.value;
   if (pending?.text !== text) {
-    const thought = { id: uuidv7(), timestamp: localTimestamp() };
-    // A thought without details is still worth logging.
-    pending = { text, body: text.trim() ? { ...thought, description: text } : thought };
+    pending = { text, body: { id: uuidv7(), timestamp: localTimestamp(), description: text } };
   }
   let logged = false;
   try {
