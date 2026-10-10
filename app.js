@@ -5,6 +5,7 @@ const loading = document.getElementById('loading');
 const unreachable = document.getElementById('unreachable');
 const form = document.getElementById('log');
 const logButton = form.querySelector('button');
+const logError = document.getElementById('log-error');
 const list = document.getElementById('thoughts');
 const today = document.getElementById('today');
 const byHour = document.getElementById('by-hour');
@@ -34,6 +35,20 @@ function localTimestamp() {
   const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
   const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
   return `${date}T${time}${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
+}
+
+// A UUIDv7: the time in milliseconds, then random bits.
+function uuidv7() {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  let ms = Date.now();
+  for (let i = 5; i >= 0; i--) {
+    bytes[i] = ms % 256;
+    ms = Math.floor(ms / 256);
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
 const hourName = (hour) => `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}`;
@@ -167,27 +182,41 @@ signin.addEventListener('submit', async (event) => {
   await load();
 });
 
+// The thought being logged, kept until the server has it. Logging the same text again after a failure resends it
+// with the same id and timestamp, so the server sees a retry and never logs it twice.
+let pending = null;
+
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
   // One log at a time, so a double tap doesn't log twice.
   if (logButton.disabled) return;
   logButton.disabled = true;
   logButton.textContent = 'Logging…';
+  const text = form.description.value;
+  if (pending?.text !== text) {
+    const thought = { id: uuidv7(), timestamp: localTimestamp() };
+    // A thought without details is still worth logging.
+    pending = { text, body: text.trim() ? { ...thought, description: text } : thought };
+  }
+  let logged = false;
   try {
-    await api('thoughts', {
+    const res = await api('thoughts', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      // A thought without details is still worth logging.
-      body: JSON.stringify(form.description.value.trim()
-        ? { description: form.description.value, timestamp: localTimestamp() }
-        : { timestamp: localTimestamp() }),
+      body: JSON.stringify(pending.body),
     });
-    form.reset();
-    await load();
+    logged = res.ok;
+  } catch (error) {
+    if (error instanceof SignedOut) return;
   } finally {
     logButton.disabled = false;
     logButton.textContent = 'Log';
   }
+  logError.hidden = logged;
+  if (!logged) return;
+  pending = null;
+  form.reset();
+  await load();
 });
 
 document.getElementById('retry').addEventListener('click', load);

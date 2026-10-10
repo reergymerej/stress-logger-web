@@ -4,6 +4,9 @@ import { randomUUID } from 'node:crypto';
 const API = 'https://stress-logger-reergymerej.fly.dev/v1/thoughts';
 const USER = 'alice';
 const PASSWORD = 'secret';
+const V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+// The time embedded in a UUIDv7.
+const v7Time = (id: string) => new Date(parseInt(id.slice(0, 8) + id.slice(9, 13), 16)).toISOString();
 const basic = (user: string, password: string) => `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`;
 
 type Thought = { id: string; description: string | null; timestamp: string };
@@ -13,8 +16,11 @@ type Counts = { byHour: number[]; byDayOfWeek: number[] };
 
 async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { byHour: Array(24).fill(0), byDayOfWeek: Array(7).fill(0) }) {
   // hold keeps POSTs waiting until it resolves, and listHold the list. down makes the server unreachable.
+  // postFails fails the next POSTs: 'down' never reaches the server, 'lost' saves the thought but loses the response,
+  // and a number is that status.
   const fake = {
-    posts: [] as unknown[],
+    posts: [] as { id?: string; description?: string; timestamp?: string }[],
+    postFails: null as null | 'down' | 'lost' | number,
     deletes: [] as string[],
     analyzed: [] as string[],
     today: { status: 200, json: { positive: 0, negative: 0, neutral: 0 } as object },
@@ -69,12 +75,18 @@ async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { 
       const body = req.postDataJSON();
       fake.posts.push(body);
       await fake.hold;
+      if (fake.postFails === 'down') return route.abort('connectionrefused');
+      if (typeof fake.postFails === 'number') return route.fulfill({ status: fake.postFails, headers, json: { error: 'boom' } });
+      // Like the server: the same id again is a retry, and gets the saved thought back.
+      const saved = thoughts.find((t) => t.id === body.id);
+      if (saved) return route.fulfill({ status: 200, headers, json: saved });
       const thought = {
-        id: randomUUID(),
+        id: body.id ?? randomUUID(),
         description: body.description?.trim() ? body.description : null,
         timestamp: new Date(body.timestamp ?? Date.now()).toISOString(),
       };
       thoughts.unshift(thought);
+      if (fake.postFails === 'lost') return route.abort('connectionreset');
       return route.fulfill({ status: 201, headers, json: thought });
     }
     await fake.listHold;
@@ -175,7 +187,7 @@ for (const [timezoneId, timestamp] of [
       await log(page, 'Late for standup');
 
       await expect(page.getByRole('listitem')).toContainText('Late for standup');
-      expect(posts).toEqual([{ description: 'Late for standup', timestamp }]);
+      expect(posts).toEqual([{ id: expect.stringMatching(V7), description: 'Late for standup', timestamp }]);
     });
   });
 }
@@ -190,9 +202,83 @@ for (const [what, description] of [['an empty', ''], ['a blank', '   ']]) {
     await log(page, description);
 
     await expect(page.getByRole('listitem')).toContainText('No details');
-    expect(posts).toEqual([{ timestamp: '2026-10-01T13:30:05+00:00' }]);
+    expect(posts).toEqual([{ id: expect.stringMatching(V7), timestamp: '2026-10-01T13:30:05+00:00' }]);
   });
 }
+
+test('each thought gets its own UUIDv7, made when it is logged', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2026-10-01T13:30:05.123Z'));
+  const { posts } = await fakeApi(page);
+  await page.goto('/');
+  await signIn(page);
+
+  await log(page, 'Traffic jam');
+  await expect(page.getByRole('listitem')).toHaveCount(1);
+  await log(page, 'Traffic jam');
+  await expect(page.getByRole('listitem')).toHaveCount(2);
+
+  expect(posts.map((p) => p.id)).toEqual([expect.stringMatching(V7), expect.stringMatching(V7)]);
+  expect(posts[0].id).not.toBe(posts[1].id);
+  expect(v7Time(posts[0].id!)).toBe('2026-10-01T13:30:05.123Z');
+});
+
+test.describe('when logging fails', () => {
+  for (const [what, failure] of [["the server can't be reached", 'down'], ['the server errors', 500]] as const) {
+    test(`when ${what}, it says so, keeps the text, and logging again retries the same thought`, async ({ page }) => {
+      await page.clock.setFixedTime(new Date('2026-10-01T13:30:05Z'));
+      const api = await fakeApi(page);
+      await page.goto('/');
+      await signIn(page);
+      api.postFails = failure;
+
+      await log(page, 'Traffic jam');
+
+      await expect(page.getByText("Couldn't log it. Try again.")).toBeVisible();
+      await expect(page.getByLabel("What's on your mind?")).toHaveValue('Traffic jam');
+      await expect(page.getByRole('button', { name: 'Log' })).toBeEnabled();
+      api.postFails = null;
+      await page.clock.setFixedTime(new Date('2026-10-01T13:31:00Z'));
+      await page.getByRole('button', { name: 'Log' }).click();
+
+      await expect(page.getByRole('listitem')).toContainText('Traffic jam');
+      await expect(page.getByText("Couldn't log it. Try again.")).toBeHidden();
+      await expect(page.getByLabel("What's on your mind?")).toHaveValue('');
+      expect(api.posts).toHaveLength(2);
+      expect(api.posts[1]).toEqual(api.posts[0]);
+    });
+  }
+
+  test('when the server saved it but the answer was lost, logging again shows it once', async ({ page }) => {
+    const api = await fakeApi(page);
+    await page.goto('/');
+    await signIn(page);
+    api.postFails = 'lost';
+
+    await log(page, 'Traffic jam');
+    await expect(page.getByText("Couldn't log it. Try again.")).toBeVisible();
+    api.postFails = null;
+    await page.getByRole('button', { name: 'Log' }).click();
+
+    await expect(page.getByLabel("What's on your mind?")).toHaveValue('');
+    await expect(page.getByRole('listitem')).toHaveCount(1);
+    expect(api.posts[1].id).toBe(api.posts[0].id);
+  });
+
+  test('changing the text after a failure logs a new thought, with a new id', async ({ page }) => {
+    const api = await fakeApi(page);
+    await page.goto('/');
+    await signIn(page);
+    api.postFails = 'down';
+    await log(page, 'Traffic jam');
+    await expect(page.getByText("Couldn't log it. Try again.")).toBeVisible();
+    api.postFails = null;
+
+    await log(page, 'Traffic jam on I-95');
+
+    await expect(page.getByRole('listitem')).toContainText('Traffic jam on I-95');
+    expect(api.posts[1].id).not.toBe(api.posts[0].id);
+  });
+});
 
 test('lists thoughts without a description as having no details', async ({ page }) => {
   await fakeApi(page, [{ id: '1', description: null, timestamp: '2026-10-01T13:30:00Z' }]);

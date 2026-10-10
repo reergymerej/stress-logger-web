@@ -30,6 +30,7 @@ Live at https://reergymerej.github.io/stress-logger-web/.
 
 - **Separate from the server,** in its own repo and deployed on its own. It talks to the API only through `/v1`.
 - **Auth:** the server uses basic auth, but browsers don't show their password prompt for cross-origin requests. So the page asks for a username and password, keeps them in `localStorage`, and asks again on a 401.
+- **IDs:** the page gives each thought a UUIDv7 when it's logged. If logging fails, the text stays, and logging it again resends the same id and timestamp, so the server sees a retry and never logs it twice.
 - **Tests mock the API** with Playwright's `page.route`, so they don't depend on the server.
 - **Tests run in Docker,** in Playwright's Linux image (`scripts/test.sh`), locally and in CI. Playwright's WebKit doesn't run on macOS 12, and one environment keeps screenshots identical everywhere. Playwright is pinned to 1.55.1, the image's version.
 - **Screenshot tests** (`e2e/app.spec.ts-snapshots/`) catch pages that render wrong or not at all, in every browser and viewport.
