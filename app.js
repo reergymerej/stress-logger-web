@@ -108,6 +108,38 @@ async function showToday() {
   if (counts) today.textContent = `Today: ${counts.positive} positive, ${counts.negative} negative, ${counts.neutral} neutral`;
 }
 
+// The server analyzes new thoughts in the background, so check back on ones still waiting, every 5 seconds for a
+// minute, and update today's counts as their analyses arrive.
+const POLL_MS = 5000;
+const POLL_TRIES = 12;
+let pollTimer;
+function pollAnalyses(thoughts) {
+  clearTimeout(pollTimer);
+  let waiting = thoughts
+    .filter((t) => t.description && t.analysis && Object.keys(t.analysis).length === 0)
+    .map((t) => t.id)
+    .slice(0, 100);
+  let tries = 0;
+  const next = () => {
+    if (waiting.length === 0 || tries++ >= POLL_TRIES) return;
+    pollTimer = setTimeout(async () => {
+      try {
+        const res = await api(`thoughts/analyses?ids=${waiting.join(',')}`);
+        if (res.ok) {
+          const analyses = await res.json();
+          const arrived = waiting.filter((id) => Object.keys(analyses[id] ?? {}).length > 0);
+          waiting = waiting.filter((id) => !arrived.includes(id));
+          if (arrived.length > 0) await showToday();
+        }
+      } catch (error) {
+        if (error instanceof SignedOut) return;
+      }
+      next();
+    }, POLL_MS);
+  };
+  next();
+}
+
 async function load() {
   // The server stops when idle, and waking it up can take a few seconds.
   const appearing = app.hidden;
@@ -160,6 +192,7 @@ async function load() {
     item.append(remove);
     return item;
   }));
+  pollAnalyses(thoughts);
 }
 
 signin.addEventListener('submit', async (event) => {

@@ -9,7 +9,7 @@ const V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}
 const v7Time = (id: string) => new Date(parseInt(id.slice(0, 8) + id.slice(9, 13), 16)).toISOString();
 const basic = (user: string, password: string) => `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`;
 
-type Thought = { id: string; description: string | null; timestamp: string };
+type Thought = { id: string; description: string | null; timestamp: string; analysis?: object };
 
 // A stand-in for the API, so these tests don't depend on the server repo.
 type Counts = { byHour: number[]; byDayOfWeek: number[] };
@@ -24,6 +24,9 @@ async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { 
     deletes: [] as string[],
     today: { status: 200, json: { positive: 0, negative: 0, neutral: 0 } as object },
     todayDates: [] as string[],
+    // What GET /analyses answers, by id, and the ids each poll asked for.
+    analyses: {} as Record<string, object>,
+    analysisPolls: [] as string[][],
     counts,
     countsStatus: 200,
     hold: null as Promise<void> | null,
@@ -60,6 +63,14 @@ async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { 
     fake.todayDates.push(date);
     return route.fulfill({ status: fake.today.status, headers, json: { date, ...fake.today.json } });
   });
+  // Registered after oneThought, so it wins for this path.
+  await page.route((url) => url.href.startsWith(`${API}/analyses?`), async (route) => {
+    if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
+    if (route.request().headers().authorization !== basic(USER, PASSWORD)) return route.fulfill({ status: 401, headers });
+    const ids = new URL(route.request().url()).searchParams.get('ids')!.split(',');
+    fake.analysisPolls.push(ids);
+    return route.fulfill({ headers, json: Object.fromEntries(ids.map((id) => [id, fake.analyses[id] ?? {}])) });
+  });
   await page.route(API, async (route) => {
     if (fake.down) return route.abort('connectionrefused');
     const req = route.request();
@@ -78,6 +89,7 @@ async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { 
         id: body.id ?? randomUUID(),
         description: body.description?.trim() ? body.description : null,
         timestamp: new Date(body.timestamp ?? Date.now()).toISOString(),
+        analysis: {},
       };
       thoughts.unshift(thought);
       if (fake.postFails === 'lost') return route.abort('connectionreset');
@@ -389,6 +401,67 @@ test.describe("today's sentiment", () => {
 
     await expect(page.getByRole('listitem')).toContainText('Missed the train');
     await expect(page.locator('#today')).toBeHidden();
+  });
+});
+
+test.describe('waiting for analysis', () => {
+  test.use({ timezoneId: 'America/New_York' });
+
+  test("checks back for a new thought's analysis, and updates today's counts when it arrives", async ({ page }) => {
+    await page.clock.install();
+    const api = await fakeApi(page);
+    await page.goto('/');
+    await signIn(page);
+    await log(page, 'Missed the train');
+    await expect(page.getByRole('listitem')).toContainText('Missed the train');
+    const id = api.posts[0].id!;
+
+    await page.clock.runFor(5000);
+    await expect.poll(() => api.analysisPolls).toEqual([[id]]);
+    await expect(page.locator('#today')).toHaveText('Today: 0 positive, 0 negative, 0 neutral');
+
+    api.analyses[id] = { sentiment: 'negative' };
+    api.today.json = { positive: 0, negative: 1, neutral: 0 };
+    await page.clock.runFor(5000);
+
+    await expect(page.locator('#today')).toHaveText('Today: 0 positive, 1 negative, 0 neutral');
+    // Nothing is waiting now, so it stops checking.
+    await page.clock.runFor(60_000);
+    expect(api.analysisPolls).toHaveLength(2);
+  });
+
+  test('gives up after a minute', async ({ page }) => {
+    await page.clock.install();
+    const api = await fakeApi(page);
+    await page.goto('/');
+    await signIn(page);
+    await log(page, 'Missed the train');
+    await expect(page.getByRole('listitem')).toContainText('Missed the train');
+
+    // Each check is scheduled after the last one comes back, so wait for each before moving the clock on.
+    for (let i = 1; i <= 12; i++) {
+      await page.clock.runFor(5000);
+      await expect.poll(() => api.analysisPolls).toHaveLength(i);
+    }
+    await page.clock.runFor(60_000);
+
+    expect(api.analysisPolls).toHaveLength(12);
+  });
+
+  test("only checks on thoughts still waiting: not analyzed ones, or ones without details", async ({ page }) => {
+    await page.clock.install();
+    const api = await fakeApi(page, [
+      { id: 'waiting', description: 'Waiting', timestamp: '2026-10-03T13:30:00Z', analysis: {} },
+      { id: 'done', description: 'Analyzed', timestamp: '2026-10-02T13:30:00Z', analysis: { sentiment: 'positive' } },
+      { id: 'blank', description: null, timestamp: '2026-10-01T13:30:00Z', analysis: {} },
+    ]);
+    await page.goto('/');
+    await signIn(page);
+    await expect(page.getByRole('listitem')).toHaveCount(3);
+
+    await page.clock.runFor(5000);
+
+    await expect.poll(() => api.analysisPolls).toEqual([['waiting']]);
   });
 });
 
