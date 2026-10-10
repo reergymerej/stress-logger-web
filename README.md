@@ -9,6 +9,7 @@ npm install
 npm start                    # http://localhost:8080, using a local API (npm run local in stress-logger)
 npm start -- prod            # same site, using the live API
 npm start -- https://my.api  # or any API URL
+npm run dev                  # like npm start (same backend choices), and reloads the page when a file changes
 colima start # once per boot: tests run in Docker
 npm test     # Playwright in Chromium and WebKit, desktop and phone, with screenshots
 npm test -- --update-snapshots   # after an intended visual change; review the new images
