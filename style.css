@@ -73,23 +73,52 @@ button {
 ul { list-style: none; margin: 0; padding: 0; }
 
 li {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
   padding: 0.75rem 0;
   border-bottom: 1px solid var(--border);
   overflow-wrap: anywhere;
 }
 
-li > div { flex: 1; min-width: 0; }
+li p { margin: 0.25rem 0 0; }
 
-button.delete {
-  padding: 0 0.75rem;
+li .head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.controls { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; }
+
+.controls button {
+  min-height: 32px;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: normal;
   background: transparent;
   color: var(--muted);
-  font-weight: normal;
   border: 1px solid var(--border);
 }
+
+button.delete { min-width: 32px; padding: 0; }
+
+.sentiment { display: flex; }
+
+.sentiment button { border-radius: 0; margin-left: -1px; }
+
+.sentiment button:first-child { border-radius: 8px 0 0 8px; margin-left: 0; }
+
+.sentiment button:last-child { border-radius: 0 8px 8px 0; }
+
+.sentiment button:disabled { opacity: 0.5; }
+
+.sentiment button[aria-pressed='true'] { color: #fff; border-color: transparent; }
+
+.sentiment button[value='negative'][aria-pressed='true'] { background: var(--negative); }
+
+.sentiment button[value='neutral'][aria-pressed='true'] { background: var(--muted); }
+
+.sentiment button[value='positive'][aria-pressed='true'] { background: var(--positive); }
 
 h2 { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.5rem; }
 
@@ -147,26 +176,7 @@ summary::before { content: '▸'; color: var(--muted); }
 
 li .none { color: var(--muted); font-style: italic; }
 
-time { display: block; font-size: 0.85rem; color: var(--muted); }
+time { font-size: 0.85rem; color: var(--muted); }
 
 #today { margin: 0 0 1rem; color: var(--muted); }
 
-.sentiment-row { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.25rem; }
-
-select.sentiment {
-  min-height: 44px;
-  min-width: 8.5rem;
-  padding: 0 0.5rem;
-  font: inherit;
-  font-size: 0.85rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-}
-
-select.sentiment[data-sentiment='positive'] { color: var(--positive); }
-
-select.sentiment[data-sentiment='negative'] { color: var(--negative); }
-
-.sentiment-row .error { font-size: 0.85rem; }

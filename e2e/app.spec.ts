@@ -478,10 +478,13 @@ test.describe('waiting for analysis', () => {
   });
 });
 
-const sentimentOf = (page: Page, text: string) => page.getByRole('listitem').filter({ hasText: text }).getByLabel('Sentiment');
+const itemWith = (page: Page, text: string) => page.getByRole('listitem').filter({ hasText: text });
+const sentimentButton = (page: Page, text: string, name: string) =>
+  itemWith(page, text).getByRole('group', { name: 'Sentiment' }).getByRole('button', { name, exact: true });
+const sentimentNames = ['Negative', 'Neutral', 'Positive'];
 
 test.describe("each thought's sentiment", () => {
-  test('shows it, or that the thought is still being analyzed', async ({ page }) => {
+  test('shows it, and is disabled while the thought is still being analyzed', async ({ page }) => {
     await fakeApi(page, [
       { id: 'waiting', description: 'Waiting', timestamp: '2026-10-03T13:30:00Z', analysis: {} },
       { id: 'done', description: 'Analyzed', timestamp: '2026-10-02T13:30:00Z', analysis: { sentiment: 'negative' } },
@@ -490,11 +493,16 @@ test.describe("each thought's sentiment", () => {
     await page.goto('/');
     await signIn(page);
 
-    await expect(sentimentOf(page, 'Analyzed')).toHaveValue('negative');
-    await expect(sentimentOf(page, 'Analyzed').locator('option:checked')).toHaveText('Negative');
-    await expect(sentimentOf(page, 'Waiting').locator('option:checked')).toHaveText('Analyzing…');
+    await expect(sentimentButton(page, 'Analyzed', 'Negative')).toHaveAttribute('aria-pressed', 'true');
+    await expect(sentimentButton(page, 'Analyzed', 'Neutral')).toHaveAttribute('aria-pressed', 'false');
+    await expect(sentimentButton(page, 'Analyzed', 'Positive')).toHaveAttribute('aria-pressed', 'false');
+    for (const name of sentimentNames) {
+      await expect(sentimentButton(page, 'Analyzed', name)).toBeEnabled();
+      await expect(sentimentButton(page, 'Waiting', name)).toBeDisabled();
+      await expect(sentimentButton(page, 'Waiting', name)).toHaveAttribute('aria-pressed', 'false');
+    }
     // Without words, there's nothing to analyze.
-    await expect(sentimentOf(page, 'No details')).toHaveCount(0);
+    await expect(itemWith(page, 'No details').getByRole('group', { name: 'Sentiment' })).toHaveCount(0);
   });
 
   test('shows the analysis once it arrives', async ({ page }) => {
@@ -503,15 +511,16 @@ test.describe("each thought's sentiment", () => {
     await page.goto('/');
     await signIn(page);
     await log(page, 'Missed the train');
-    await expect(sentimentOf(page, 'Missed the train').locator('option:checked')).toHaveText('Analyzing…');
+    await expect(sentimentButton(page, 'Missed the train', 'Negative')).toBeDisabled();
 
     api.analyses[api.posts[0].id!] = { sentiment: 'negative' };
     await page.clock.runFor(5000);
 
-    await expect(sentimentOf(page, 'Missed the train')).toHaveValue('negative');
+    await expect(sentimentButton(page, 'Missed the train', 'Negative')).toHaveAttribute('aria-pressed', 'true');
+    await expect(sentimentButton(page, 'Missed the train', 'Positive')).toBeEnabled();
   });
 
-  test("changing it saves it, and today's counts follow", async ({ page }) => {
+  test("one tap changes it and saves it, and today's counts follow", async ({ page }) => {
     const api = await fakeApi(page, [
       { id: 'done', description: 'Analyzed', timestamp: '2026-10-02T13:30:00Z', analysis: { sentiment: 'negative' } },
     ]);
@@ -520,27 +529,25 @@ test.describe("each thought's sentiment", () => {
     await expect(page.locator('#today')).toHaveText('Today: 0 positive, 0 negative, 0 neutral');
     api.today.json = { positive: 1, negative: 0, neutral: 0 };
 
-    await sentimentOf(page, 'Analyzed').selectOption('positive');
+    await sentimentButton(page, 'Analyzed', 'Positive').click();
 
     await expect(page.locator('#today')).toHaveText('Today: 1 positive, 0 negative, 0 neutral');
     expect(api.sentimentPuts).toEqual([{ id: 'done', sentiment: 'positive' }]);
-    await expect(sentimentOf(page, 'Analyzed')).toHaveValue('positive');
+    await expect(sentimentButton(page, 'Analyzed', 'Positive')).toHaveAttribute('aria-pressed', 'true');
+    await expect(sentimentButton(page, 'Analyzed', 'Negative')).toHaveAttribute('aria-pressed', 'false');
   });
 
-  test('can be set before the analysis arrives, and is no longer waited on', async ({ page }) => {
-    await page.clock.install();
+  test('tapping the one already chosen saves nothing', async ({ page }) => {
     const api = await fakeApi(page, [
-      { id: 'waiting', description: 'Waiting', timestamp: '2026-10-03T13:30:00Z', analysis: {} },
+      { id: 'done', description: 'Analyzed', timestamp: '2026-10-02T13:30:00Z', analysis: { sentiment: 'negative' } },
     ]);
     await page.goto('/');
     await signIn(page);
 
-    await sentimentOf(page, 'Waiting').selectOption('neutral');
-    await expect.poll(() => api.sentimentPuts).toEqual([{ id: 'waiting', sentiment: 'neutral' }]);
-    await page.clock.runFor(60_000);
+    await sentimentButton(page, 'Analyzed', 'Negative').click();
+    await sentimentButton(page, 'Analyzed', 'Neutral').click();
 
-    await expect(sentimentOf(page, 'Waiting')).toHaveValue('neutral');
-    expect(api.analysisPolls).toEqual([]);
+    await expect.poll(() => api.sentimentPuts).toEqual([{ id: 'done', sentiment: 'neutral' }]);
   });
 
   test("when saving fails, puts it back and says it couldn't", async ({ page }) => {
@@ -551,11 +558,35 @@ test.describe("each thought's sentiment", () => {
     await page.goto('/');
     await signIn(page);
 
-    await sentimentOf(page, 'Analyzed').selectOption('positive');
+    await sentimentButton(page, 'Analyzed', 'Positive').click();
 
-    await expect(page.getByRole('listitem').filter({ hasText: 'Analyzed' })).toContainText("Couldn't change it");
-    await expect(sentimentOf(page, 'Analyzed')).toHaveValue('negative');
+    await expect(itemWith(page, 'Analyzed')).toContainText("Couldn't change it");
+    await expect(sentimentButton(page, 'Analyzed', 'Negative')).toHaveAttribute('aria-pressed', 'true');
+    await expect(sentimentButton(page, 'Analyzed', 'Positive')).toHaveAttribute('aria-pressed', 'false');
   });
+});
+
+test('puts the time and the controls in a header above the thought, with the controls on the right', async ({ page }) => {
+  await fakeApi(page, [
+    { id: 'done', description: 'Analyzed', timestamp: '2026-10-02T13:30:00Z', analysis: { sentiment: 'negative' } },
+  ]);
+  await page.goto('/');
+  await signIn(page);
+
+  const item = itemWith(page, 'Analyzed');
+  const time = (await item.locator('time').boundingBox())!;
+  const group = (await item.getByRole('group', { name: 'Sentiment' }).boundingBox())!;
+  const remove = (await item.getByRole('button', { name: 'Delete' }).boundingBox())!;
+  const text = (await item.getByText('Analyzed', { exact: true }).boundingBox())!;
+  const itemBox = (await item.boundingBox())!;
+  // All on one row, the controls together at the right end.
+  expect(Math.abs(group.y + group.height / 2 - (time.y + time.height / 2))).toBeLessThan(4);
+  expect(group.x).toBeGreaterThan(time.x + time.width);
+  expect(remove.x).toBeGreaterThanOrEqual(group.x + group.width);
+  expect(remove.x + remove.width).toBeCloseTo(itemBox.x + itemBox.width, 0);
+  // The thought below.
+  expect(text.y).toBeGreaterThanOrEqual(Math.max(time.y + time.height, group.y + group.height));
+  await expect(item.getByRole('button', { name: 'Delete' })).toHaveText('✕');
 });
 
 test.describe('deleting', () => {

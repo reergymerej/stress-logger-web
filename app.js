@@ -113,10 +113,9 @@ async function showToday() {
 const POLL_MS = 5000;
 const POLL_TRIES = 12;
 let pollTimer;
-let waiting = [];
 function pollAnalyses(thoughts) {
   clearTimeout(pollTimer);
-  waiting = thoughts
+  let waiting = thoughts
     .filter((t) => t.description && t.analysis && Object.keys(t.analysis).length === 0)
     .map((t) => t.id)
     .slice(0, 100);
@@ -124,8 +123,6 @@ function pollAnalyses(thoughts) {
   const next = () => {
     if (waiting.length === 0 || tries++ >= POLL_TRIES) return;
     pollTimer = setTimeout(async () => {
-      // A sentiment set by hand meanwhile may have left nothing to wait for.
-      if (waiting.length === 0) return;
       try {
         const res = await api(`thoughts/analyses?ids=${waiting.join(',')}`);
         if (res.ok) {
@@ -144,59 +141,57 @@ function pollAnalyses(thoughts) {
   next();
 }
 
-const sentiments = { positive: 'Positive', negative: 'Negative', neutral: 'Neutral' };
-// Each listed thought's sentiment picker, by id, showing a sentiment when it's given one.
+const sentiments = { negative: 'Negative', neutral: 'Neutral', positive: 'Positive' };
+// Each listed thought's sentiment buttons, by id, showing a sentiment when it's given one.
 const pickers = new Map();
 
-// Shows a thought's sentiment, or that it's still being analyzed. Picking another one saves it, for when the
-// analysis got it wrong, and puts the old one back if that fails.
-function sentimentPicker(thought) {
-  const select = document.createElement('select');
-  select.className = 'sentiment';
-  select.setAttribute('aria-label', 'Sentiment');
-  const analyzing = new Option('Analyzing…', '');
-  analyzing.disabled = true;
-  select.append(analyzing, ...Object.entries(sentiments).map(([value, name]) => new Option(name, value)));
-  const error = document.createElement('span');
-  error.className = 'error';
-  error.textContent = "Couldn't change it";
-  error.hidden = true;
+// A button per sentiment, the thought's own pressed, all disabled while it's still being analyzed. Tapping another
+// saves it, for when the analysis got it wrong, and puts the old one back if that fails.
+function sentimentPicker(thought, error) {
+  const group = document.createElement('div');
+  group.className = 'sentiment';
+  group.setAttribute('role', 'group');
+  group.setAttribute('aria-label', 'Sentiment');
   let current;
   const show = (sentiment) => {
     current = sentiment;
-    if (sentiment) analyzing.remove();
-    select.value = sentiment ?? '';
-    select.dataset.sentiment = sentiment ?? '';
+    for (const button of group.children) {
+      button.disabled = !sentiment;
+      button.setAttribute('aria-pressed', String(button.value === sentiment));
+    }
   };
+  group.append(...Object.entries(sentiments).map(([value, name]) => {
+    const button = document.createElement('button');
+    button.value = value;
+    button.textContent = name;
+    button.addEventListener('click', async () => {
+      if (value === current) return;
+      const before = current;
+      error.hidden = true;
+      show(value);
+      let saved = false;
+      try {
+        const res = await api(`thoughts/${thought.id}/sentiment`, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ sentiment: value }),
+        });
+        saved = res.ok;
+      } catch (err) {
+        if (err instanceof SignedOut) return;
+      }
+      if (!saved) {
+        show(before);
+        error.hidden = false;
+        return;
+      }
+      await showToday();
+    });
+    return button;
+  }));
   show(thought.analysis?.sentiment);
   pickers.set(thought.id, show);
-  select.addEventListener('change', async () => {
-    const sentiment = select.value;
-    error.hidden = true;
-    let saved = false;
-    try {
-      const res = await api(`thoughts/${thought.id}/sentiment`, {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sentiment }),
-      });
-      saved = res.ok;
-    } catch (err) {
-      if (err instanceof SignedOut) return;
-    }
-    if (!saved) {
-      show(current);
-      error.hidden = false;
-      return;
-    }
-    show(sentiment);
-    waiting = waiting.filter((id) => id !== thought.id);
-    await showToday();
-  });
-  const row = document.createElement('div');
-  row.className = 'sentiment-row';
-  row.append(select, error);
-  return row;
+  return group;
 }
 
 async function load() {
@@ -227,29 +222,39 @@ async function load() {
   pickers.clear();
   list.replaceChildren(...thoughts.map((thought) => {
     const item = document.createElement('li');
-    const entry = document.createElement('div');
+    // The time, then the controls together at the right, above the thought.
+    const head = document.createElement('div');
+    head.className = 'head';
     const time = document.createElement('time');
     time.dateTime = thought.timestamp;
     time.textContent = new Date(thought.timestamp).toLocaleString(undefined, timeFormat);
+    const controls = document.createElement('div');
+    controls.className = 'controls';
+    const text = document.createElement('p');
+    const error = document.createElement('p');
+    error.className = 'error';
+    error.textContent = "Couldn't change it";
+    error.hidden = true;
     if (thought.description) {
-      entry.append(time, thought.description, sentimentPicker(thought));
+      text.textContent = thought.description;
+      controls.append(sentimentPicker(thought, error));
     } else {
-      const none = document.createElement('span');
-      none.className = 'none';
-      none.textContent = 'No details';
-      entry.append(time, none);
+      text.className = 'none';
+      text.textContent = 'No details';
     }
     const remove = document.createElement('button');
     remove.className = 'delete';
-    remove.textContent = 'Delete';
+    remove.textContent = '✕';
+    remove.setAttribute('aria-label', 'Delete');
     remove.addEventListener('click', async () => {
       const what = thought.description ? `"${thought.description}"` : `the thought from ${time.textContent}`;
       if (!confirm(`Delete ${what}?`)) return;
       await api(`thoughts/${thought.id}`, { method: 'DELETE' });
       await load();
     });
-    item.append(entry);
-    item.append(remove);
+    controls.append(remove);
+    head.append(time, controls);
+    item.append(head, text, error);
     return item;
   }));
   pollAnalyses(thoughts);
