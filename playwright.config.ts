@@ -11,6 +11,10 @@ export default defineConfig({
     timezoneId: 'UTC',
     // For tests that fail only now and then: open with `npx playwright show-trace`.
     trace: 'retain-on-failure',
+    // Nothing here should take long, so a stuck step fails fast and says which step it was,
+    // instead of using up the whole test timeout.
+    actionTimeout: 5_000,
+    navigationTimeout: 5_000,
   },
   // Run through `npm test`, in Docker: Playwright's WebKit doesn't run on macOS 12.
   projects: [
