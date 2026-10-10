@@ -1,17 +1,17 @@
 import { test, expect, type Page } from '@playwright/test';
 import { randomUUID } from 'node:crypto';
 
-const API = 'https://stress-logger-reergymerej.fly.dev/v1/stressors';
+const API = 'https://stress-logger-reergymerej.fly.dev/v1/thoughts';
 const USER = 'alice';
 const PASSWORD = 'secret';
 const basic = (user: string, password: string) => `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`;
 
-type Stressor = { id: string; description: string | null; timestamp: string };
+type Thought = { id: string; description: string | null; timestamp: string };
 
 // A stand-in for the API, so these tests don't depend on the server repo.
 type Counts = { byHour: number[]; byDayOfWeek: number[] };
 
-async function fakeApi(page: Page, stressors: Stressor[] = [], counts: Counts = { byHour: Array(24).fill(0), byDayOfWeek: Array(7).fill(0) }) {
+async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { byHour: Array(24).fill(0), byDayOfWeek: Array(7).fill(0) }) {
   // hold keeps POSTs waiting until it resolves, and listHold the list. down makes the server unreachable.
   const fake = {
     posts: [] as unknown[],
@@ -30,16 +30,16 @@ async function fakeApi(page: Page, stressors: Stressor[] = [], counts: Counts = 
     if (fake.countsStatus !== 200) return route.fulfill({ status: fake.countsStatus, headers, json: { error: 'boom' } });
     return route.fulfill({ headers, json: fake.counts });
   });
-  const oneStressor = (url: URL) => url.href.startsWith(`${API}/`) && url.href !== `${API}/counts`;
-  await page.route(oneStressor, async (route) => {
+  const oneThought = (url: URL) => url.href.startsWith(`${API}/`) && url.href !== `${API}/counts`;
+  await page.route(oneThought, async (route) => {
     const req = route.request();
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
     if (req.headers().authorization !== basic(USER, PASSWORD)) return route.fulfill({ status: 401, headers });
     const id = req.url().slice(`${API}/`.length);
-    const index = stressors.findIndex((s) => s.id === id);
+    const index = thoughts.findIndex((s) => s.id === id);
     if (req.method() !== 'DELETE' || index === -1) return route.fulfill({ status: 404, headers });
     fake.deletes.push(id);
-    stressors.splice(index, 1);
+    thoughts.splice(index, 1);
     return route.fulfill({ status: 204, headers });
   });
   await page.route(API, async (route) => {
@@ -51,16 +51,16 @@ async function fakeApi(page: Page, stressors: Stressor[] = [], counts: Counts = 
       const body = req.postDataJSON();
       fake.posts.push(body);
       await fake.hold;
-      const stressor = {
+      const thought = {
         id: randomUUID(),
         description: body.description?.trim() ? body.description : null,
         timestamp: new Date(body.timestamp ?? Date.now()).toISOString(),
       };
-      stressors.unshift(stressor);
-      return route.fulfill({ status: 201, headers, json: stressor });
+      thoughts.unshift(thought);
+      return route.fulfill({ status: 201, headers, json: thought });
     }
     await fake.listHold;
-    return route.fulfill({ headers, json: stressors });
+    return route.fulfill({ headers, json: thoughts });
   });
   return fake;
 }
@@ -76,7 +76,7 @@ const log = async (page: Page, description: string) => {
   await page.getByRole('button', { name: 'Log' }).click();
 };
 
-test('asks for a username and password, then lists stressors newest first, in local time', async ({ page }) => {
+test('asks for a username and password, then lists thoughts newest first, in local time', async ({ page }) => {
   await fakeApi(page, [
     { id: '2', description: 'Car broke down', timestamp: '2026-10-02T09:05:00Z' },
     { id: '1', description: 'Flight delayed', timestamp: '2026-10-01T13:30:00Z' },
@@ -120,7 +120,7 @@ test.describe('asks again', () => {
 });
 
 
-test('logging a stressor shows it and clears the input', async ({ page }) => {
+test('logging a thought shows it and clears the input', async ({ page }) => {
   const { posts } = await fakeApi(page);
   await page.goto('/');
   await signIn(page);
@@ -155,7 +155,7 @@ for (const [timezoneId, timestamp] of [
 }
 
 for (const [what, description] of [['an empty', ''], ['a blank', '   ']]) {
-  test(`logging with ${what} description logs a stressor with no details`, async ({ page }) => {
+  test(`logging with ${what} description logs a thought with no details`, async ({ page }) => {
     await page.clock.setFixedTime(new Date('2026-10-01T13:30:05Z'));
     const { posts } = await fakeApi(page);
     await page.goto('/');
@@ -168,7 +168,7 @@ for (const [what, description] of [['an empty', ''], ['a blank', '   ']]) {
   });
 }
 
-test('lists stressors without a description as having no details', async ({ page }) => {
+test('lists thoughts without a description as having no details', async ({ page }) => {
   await fakeApi(page, [{ id: '1', description: null, timestamp: '2026-10-01T13:30:00Z' }]);
   await page.goto('/');
 
@@ -199,15 +199,15 @@ test('logging shows it is busy and ignores more submits until done', async ({ pa
 });
 
 test.describe('deleting', () => {
-  const stressors = () => [
+  const thoughts = () => [
     { id: 'keep', description: 'Keep me', timestamp: '2026-10-02T13:30:00Z' },
     { id: 'oops', description: 'Logged by mistake', timestamp: '2026-10-01T13:30:00Z' },
   ];
   const deleteButton = (page: Page, description: string) =>
     page.getByRole('listitem').filter({ hasText: description }).getByRole('button', { name: 'Delete' });
 
-  test('deletes a stressor after confirming', async ({ page }) => {
-    const api = await fakeApi(page, stressors());
+  test('deletes a thought after confirming', async ({ page }) => {
+    const api = await fakeApi(page, thoughts());
     await page.goto('/');
     await signIn(page);
     let message = '';
@@ -224,8 +224,8 @@ test.describe('deleting', () => {
     expect(api.deletes).toEqual(['oops']);
   });
 
-  test('keeps the stressor when not confirmed', async ({ page }) => {
-    const api = await fakeApi(page, stressors());
+  test('keeps the thought when not confirmed', async ({ page }) => {
+    const api = await fakeApi(page, thoughts());
     await page.goto('/');
     await signIn(page);
     page.once('dialog', (dialog) => dialog.dismiss());
@@ -236,7 +236,7 @@ test.describe('deleting', () => {
     expect(api.deletes).toEqual([]);
   });
 
-  test('asks about a stressor with no details by its time', async ({ page }) => {
+  test('asks about a thought with no details by its time', async ({ page }) => {
     await fakeApi(page, [{ id: 'blank', description: null, timestamp: '2026-10-01T13:30:00Z' }]);
     await page.goto('/');
     await signIn(page);
@@ -252,7 +252,7 @@ test.describe('deleting', () => {
   });
 });
 
-test('says it is loading until the stressors arrive, since the server can be slow to wake up', async ({ page }) => {
+test('says it is loading until the thoughts arrive, since the server can be slow to wake up', async ({ page }) => {
   const api = await fakeApi(page, [{ id: '1', description: 'Flight delayed', timestamp: '2026-10-01T13:30:00Z' }]);
   let release = () => {};
   api.listHold = new Promise((resolve) => (release = resolve));
@@ -379,7 +379,7 @@ test.describe('looks right', () => {
   byHour[17] = 3;
   byHour[22] = 1;
   const counts = { byHour, byDayOfWeek: [1, 2, 3, 0, 2, 1, 1] };
-  const stressors = [
+  const thoughts = [
     { id: '2', description: 'Car broke down on the way to work', timestamp: '2026-10-02T13:05:00Z' },
     { id: '1', description: 'Flight delayed', timestamp: '2026-10-01T13:30:00Z' },
   ];
@@ -391,8 +391,8 @@ test.describe('looks right', () => {
     await expect(page).toHaveScreenshot('signed-out.png');
   });
 
-  test('signed in, with stressors and counts', async ({ page }) => {
-    await fakeApi(page, stressors, counts);
+  test('signed in, with thoughts and counts', async ({ page }) => {
+    await fakeApi(page, thoughts, counts);
     await page.goto('/');
     await signIn(page);
     await expect(page.getByRole('listitem')).toHaveCount(2);
@@ -401,7 +401,7 @@ test.describe('looks right', () => {
   });
 
   test('signed in, with Patterns open', async ({ page }) => {
-    await fakeApi(page, stressors, counts);
+    await fakeApi(page, thoughts, counts);
     await page.goto('/');
     await signIn(page);
     await expect(page.getByRole('listitem')).toHaveCount(2);

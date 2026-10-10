@@ -94,8 +94,8 @@ async function load() {
   let stressors, counts;
   try {
     [stressors, counts] = await Promise.all([
-      api('stressors').then((res) => res.json()),
-      api('stressors/counts').then((res) => (res.ok ? res.json() : null)),
+      api('thoughts').then((res) => res.json()),
+      api('thoughts/counts').then((res) => (res.ok ? res.json() : null)),
     ]);
   } catch (error) {
     if (error instanceof SignedOut) return;
@@ -125,7 +125,7 @@ async function load() {
     remove.addEventListener('click', async () => {
       const what = stressor.description ? `"${stressor.description}"` : `the stressor from ${time.textContent}`;
       if (!confirm(`Delete ${what}?`)) return;
-      await api(`stressors/${stressor.id}`, { method: 'DELETE' });
+      await api(`thoughts/${stressor.id}`, { method: 'DELETE' });
       await load();
     });
     item.append(entry, remove);
@@ -147,7 +147,7 @@ form.addEventListener('submit', async (event) => {
   logButton.disabled = true;
   logButton.textContent = 'Logging…';
   try {
-    await api('stressors', {
+    await api('thoughts', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       // A stressor without details is still worth logging.
