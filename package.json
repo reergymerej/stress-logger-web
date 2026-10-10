@@ -7,7 +7,7 @@
   "license": "ISC",
   "type": "module",
   "scripts": {
-    "start": "serve -l 3000 .",
+    "start": "node scripts/start.js",
     "test": "sh scripts/test.sh"
   },
   "devDependencies": {

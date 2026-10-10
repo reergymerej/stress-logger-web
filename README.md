@@ -6,13 +6,15 @@ The web client for [Thought Logger](https://github.com/reergymerej/stress-logger
 
 ```sh
 npm install
-npm start    # http://localhost:3000
+npm start                    # http://localhost:8080, using a local API (npm run local in stress-logger)
+npm start -- prod            # same site, using the live API
+npm start -- https://my.api  # or any API URL
 colima start # once per boot: tests run in Docker
 npm test     # Playwright in Chromium and WebKit, desktop and phone, with screenshots
 npm test -- --update-snapshots   # after an intended visual change; review the new images
 ```
 
-The API URL is in `config.js`. The API must allow this site's origin (`WEB_ORIGIN` on the server).
+The deployed site's API URL is in `config.js`. `npm start` serves its own `config.js` for the API you pick. The API must allow the site's origin (`WEB_ORIGIN` on the server): `npm run dev` and `npm run local` allow `http://localhost:8080`, and production does once it's added to `WEB_ORIGIN` there.
 
 ## Deploy
 
