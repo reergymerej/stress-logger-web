@@ -5,7 +5,7 @@ const loading = document.getElementById('loading');
 const unreachable = document.getElementById('unreachable');
 const form = document.getElementById('log');
 const logButton = form.querySelector('button');
-const list = document.getElementById('stressors');
+const list = document.getElementById('thoughts');
 const byHour = document.getElementById('by-hour');
 const byDay = document.getElementById('by-day');
 const patterns = document.getElementById('patterns');
@@ -91,9 +91,9 @@ async function load() {
     unreachable.hidden = true;
     loading.hidden = false;
   }
-  let stressors, counts;
+  let thoughts, counts;
   try {
-    [stressors, counts] = await Promise.all([
+    [thoughts, counts] = await Promise.all([
       api('thoughts').then((res) => res.json()),
       api('thoughts/counts').then((res) => (res.ok ? res.json() : null)),
     ]);
@@ -105,14 +105,14 @@ async function load() {
   }
   show(true);
   showCounts(counts);
-  list.replaceChildren(...stressors.map((stressor) => {
+  list.replaceChildren(...thoughts.map((thought) => {
     const item = document.createElement('li');
     const entry = document.createElement('div');
     const time = document.createElement('time');
-    time.dateTime = stressor.timestamp;
-    time.textContent = new Date(stressor.timestamp).toLocaleString(undefined, timeFormat);
-    if (stressor.description) {
-      entry.append(time, stressor.description);
+    time.dateTime = thought.timestamp;
+    time.textContent = new Date(thought.timestamp).toLocaleString(undefined, timeFormat);
+    if (thought.description) {
+      entry.append(time, thought.description);
     } else {
       const none = document.createElement('span');
       none.className = 'none';
@@ -123,9 +123,9 @@ async function load() {
     remove.className = 'delete';
     remove.textContent = 'Delete';
     remove.addEventListener('click', async () => {
-      const what = stressor.description ? `"${stressor.description}"` : `the stressor from ${time.textContent}`;
+      const what = thought.description ? `"${thought.description}"` : `the thought from ${time.textContent}`;
       if (!confirm(`Delete ${what}?`)) return;
-      await api(`thoughts/${stressor.id}`, { method: 'DELETE' });
+      await api(`thoughts/${thought.id}`, { method: 'DELETE' });
       await load();
     });
     item.append(entry, remove);
@@ -150,7 +150,7 @@ form.addEventListener('submit', async (event) => {
     await api('thoughts', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      // A stressor without details is still worth logging.
+      // A thought without details is still worth logging.
       body: JSON.stringify(form.description.value.trim()
         ? { description: form.description.value, timestamp: localTimestamp() }
         : { timestamp: localTimestamp() }),

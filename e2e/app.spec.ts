@@ -74,9 +74,17 @@ async function signIn(page: Page, password = PASSWORD, user = USER) {
 }
 
 const log = async (page: Page, description: string) => {
-  await page.getByLabel('What stressed you?').fill(description);
+  await page.getByLabel("What's on your mind?").fill(description);
   await page.getByRole('button', { name: 'Log' }).click();
 };
+
+test('is called Thought Logger', async ({ page }) => {
+  await fakeApi(page);
+  await page.goto('/');
+
+  await expect(page).toHaveTitle('Thought Logger');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Thought Logger');
+});
 
 test('asks for a username and password, then lists thoughts newest first, in local time', async ({ page }) => {
   await fakeApi(page, [
@@ -116,7 +124,7 @@ test.describe('asks again', () => {
 
       await expect(page.getByText('Wrong username or password')).toBeVisible();
       await expect(page.getByLabel('Password')).toBeVisible();
-      await expect(page.getByLabel('What stressed you?')).toBeHidden();
+      await expect(page.getByLabel("What's on your mind?")).toBeHidden();
     });
   }
 });
@@ -130,7 +138,7 @@ test('logging a thought shows it and clears the input', async ({ page }) => {
   await log(page, 'Traffic jam');
 
   await expect(page.getByRole('listitem')).toContainText('Traffic jam');
-  await expect(page.getByLabel('What stressed you?')).toHaveValue('');
+  await expect(page.getByLabel("What's on your mind?")).toHaveValue('');
   expect(posts).toMatchObject([{ description: 'Traffic jam' }]);
 });
 
@@ -250,7 +258,7 @@ test.describe('deleting', () => {
 
     await deleteButton(page, 'No details').click();
 
-    await expect.poll(() => message).toBe('Delete the stressor from 10/1/2026, 1:30 PM?');
+    await expect.poll(() => message).toBe('Delete the thought from 10/1/2026, 1:30 PM?');
   });
 });
 
@@ -306,7 +314,7 @@ test('fits the screen, with touch-friendly controls', async ({ page }) => {
   const button = await page.getByRole('button', { name: 'Log' }).boundingBox();
   expect(button!.height).toBeGreaterThanOrEqual(44);
   // Below 16px, iOS zooms in when the input is focused.
-  const fontSize = await page.getByLabel('What stressed you?').evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+  const fontSize = await page.getByLabel("What's on your mind?").evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
   expect(fontSize).toBeGreaterThanOrEqual(16);
 });
 
@@ -317,7 +325,7 @@ test('keeps the counts tucked away under Patterns until opened', async ({ page }
   await fakeApi(page);
   await page.goto('/');
   await signIn(page);
-  await expect(page.getByLabel('What stressed you?')).toBeVisible();
+  await expect(page.getByLabel("What's on your mind?")).toBeVisible();
   await expect(page.getByRole('heading', { name: 'By hour of day' })).toBeHidden();
 
   await openPatterns(page);

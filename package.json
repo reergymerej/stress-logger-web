@@ -2,7 +2,7 @@
   "name": "stress-logger-web",
   "version": "1.0.0",
   "private": true,
-  "description": "Web client for Stress Logger",
+  "description": "Web client for Thought Logger",
   "author": "Jeremy Greer <jex.grizzle@gmail.com>",
   "license": "ISC",
   "type": "module",
