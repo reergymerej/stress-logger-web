@@ -8,6 +8,7 @@
   "type": "module",
   "scripts": {
     "start": "node scripts/start.js",
+    "deploy": "sh scripts/deploy.sh",
     "test": "sh scripts/test.sh"
   },
   "devDependencies": {

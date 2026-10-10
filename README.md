@@ -18,6 +18,10 @@ The deployed site's API URL is in `config.js`. `npm start` serves its own `confi
 
 ## Deploy
 
+```sh
+npm run deploy   # pushes main and waits for the workflow below to pass
+```
+
 Every push to `main` runs a GitHub Actions workflow that:
 
 1. runs the tests,
