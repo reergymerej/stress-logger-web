@@ -79,8 +79,7 @@ li {
 
 li > div { flex: 1; min-width: 0; }
 
-button.delete,
-button.analyze {
+button.delete {
   padding: 0 0.75rem;
   background: transparent;
   color: var(--muted);

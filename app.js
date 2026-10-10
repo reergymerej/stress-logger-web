@@ -154,22 +154,6 @@ async function load() {
       await load();
     });
     item.append(entry);
-    if (thought.description) {
-      // First pass: the sentiment only goes to the console.
-      const analyze = document.createElement('button');
-      analyze.className = 'analyze';
-      analyze.textContent = 'Analyze';
-      analyze.addEventListener('click', async () => {
-        const res = await api(`thoughts/${thought.id}/sentiment`, { method: 'POST' });
-        const body = await res.json();
-        if (res.ok) {
-          console.log(`"${thought.description}" is ${body.sentiment}`);
-          await showToday();
-        }
-        else console.error(`Couldn't analyze "${thought.description}": ${body.error}`);
-      });
-      item.append(analyze);
-    }
     item.append(remove);
     return item;
   }));
