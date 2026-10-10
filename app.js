@@ -110,7 +110,8 @@ async function showToday() {
 
 async function load() {
   // The server stops when idle, and waking it up can take a few seconds.
-  if (app.hidden) {
+  const appearing = app.hidden;
+  if (appearing) {
     signin.hidden = true;
     unreachable.hidden = true;
     loading.hidden = false;
@@ -129,6 +130,8 @@ async function load() {
     return;
   }
   show(true);
+  // Ready to type as soon as the app shows.
+  if (appearing) form.description.focus();
   showCounts(counts);
   list.replaceChildren(...thoughts.map((thought) => {
     const item = document.createElement('li');

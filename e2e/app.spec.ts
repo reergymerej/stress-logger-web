@@ -136,6 +136,43 @@ test('remembers the sign-in', async ({ page }) => {
   await expect(page.getByLabel('Password')).toBeHidden();
 });
 
+test.describe('focuses the input, ready to type', () => {
+  test('after signing in', async ({ page }) => {
+    await fakeApi(page);
+    await page.goto('/');
+
+    await signIn(page);
+
+    await expect(page.getByLabel("What's on your mind?")).toBeFocused();
+  });
+
+  test('when the app loads signed in, once the server is awake', async ({ page }) => {
+    const api = await fakeApi(page);
+    let release!: () => void;
+    api.listHold = new Promise((resolve) => (release = resolve));
+    await page.addInitScript(() => localStorage.setItem('credentials', btoa('alice:secret')));
+    await page.goto('/');
+    await expect(page.getByText('Loading…')).toBeVisible();
+
+    release();
+
+    await expect(page.getByLabel("What's on your mind?")).toBeFocused();
+  });
+
+  test('when the server is reached after trying again', async ({ page }) => {
+    const api = await fakeApi(page);
+    api.down = true;
+    await page.goto('/');
+    await signIn(page);
+    await expect(page.getByText("Couldn't reach the server.")).toBeVisible();
+
+    api.down = false;
+    await page.getByRole('button', { name: 'Try again' }).click();
+
+    await expect(page.getByLabel("What's on your mind?")).toBeFocused();
+  });
+});
+
 test.describe('asks again', () => {
   for (const [what, password, user] of [['when the password is wrong', 'wrong', USER], ['for an unknown user', PASSWORD, 'bob']]) {
     test(what, async ({ page }) => {
