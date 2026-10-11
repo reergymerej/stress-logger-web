@@ -486,6 +486,15 @@ test.describe("today's sentiment", () => {
   });
 });
 
+// Each check for analyses is scheduled only after the last one comes back, so one big jump of the clock can happen
+// before the next timer is even set. Instead, move it a second at a time: until done() holds, or for a while.
+async function runUntil(page: Page, done: () => boolean | Promise<boolean>) {
+  await expect.poll(async () => (await done()) || (await page.clock.runFor(1000), done()), { intervals: [50] }).toBe(true);
+}
+async function runForSeconds(page: Page, seconds: number) {
+  for (let i = 0; i < seconds; i++) await page.clock.runFor(1000);
+}
+
 test.describe('waiting for analysis', () => {
   test.use({ timezoneId: 'America/New_York' });
 
@@ -504,11 +513,11 @@ test.describe('waiting for analysis', () => {
 
     api.analyses[id] = { sentiment: 'negative' };
     api.today.json = { positive: 0, negative: 1, neutral: 0 };
-    await page.clock.runFor(5000);
+    await runUntil(page, () => api.analysisPolls.length === 2);
 
     await expect(page.locator('#today')).toHaveAttribute('aria-label', 'Today: 0 positive, 1 negative, 0 neutral');
     // Nothing is waiting now, so it stops checking.
-    await page.clock.runFor(60_000);
+    await runForSeconds(page, 60);
     expect(api.analysisPolls).toHaveLength(2);
   });
 
@@ -520,12 +529,8 @@ test.describe('waiting for analysis', () => {
     await log(page, 'Missed the train');
     await expect(page.getByRole('listitem')).toContainText('Missed the train');
 
-    // Each check is scheduled after the last one comes back, so wait for each before moving the clock on.
-    for (let i = 1; i <= 12; i++) {
-      await page.clock.runFor(5000);
-      await expect.poll(() => api.analysisPolls).toHaveLength(i);
-    }
-    await page.clock.runFor(60_000);
+    for (let i = 1; i <= 12; i++) await runUntil(page, () => api.analysisPolls.length === i);
+    await runForSeconds(page, 60);
 
     expect(api.analysisPolls).toHaveLength(12);
   });
