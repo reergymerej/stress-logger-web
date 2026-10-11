@@ -100,12 +100,20 @@ async function api(path, options = {}) {
   return res;
 }
 
-// How today's analyzed thoughts went, in local time. Left out if it can't be loaded.
+// How today's analyzed thoughts went, in local time: a line filled negative, neutral, positive in proportion,
+// labeled only for screen readers. Left out if it can't be loaded.
 async function showToday() {
   const res = await api(`thoughts/sentiment-counts?date=${localTimestamp().slice(0, 10)}`);
   const counts = res.ok ? await res.json() : null;
   today.hidden = !counts;
-  if (counts) today.textContent = `Today: ${counts.positive} positive, ${counts.negative} negative, ${counts.neutral} neutral`;
+  if (!counts) return;
+  today.setAttribute('aria-label', `Today: ${counts.positive} positive, ${counts.negative} negative, ${counts.neutral} neutral`);
+  today.replaceChildren(...['negative', 'neutral', 'positive'].map((sentiment) => {
+    const part = document.createElement('span');
+    part.className = sentiment;
+    part.style.flexGrow = counts[sentiment];
+    return part;
+  }));
 }
 
 // The server analyzes new thoughts in the background, so check back on ones still waiting, every 5 seconds for a

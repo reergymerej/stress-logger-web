@@ -178,5 +178,20 @@ li .none { color: var(--muted); font-style: italic; }
 
 time { font-size: 0.85rem; color: var(--muted); }
 
-#today { margin: 0 0 1rem; color: var(--muted); }
+#today {
+  display: flex;
+  height: 6px;
+  margin: 0 0 1rem;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+#today span { flex: 0 1 0; }
+
+#today .negative { background: var(--negative); }
+
+#today .neutral { background: var(--muted); }
+
+#today .positive { background: var(--positive); }
 

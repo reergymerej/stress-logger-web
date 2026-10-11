@@ -402,8 +402,59 @@ test.describe("today's sentiment", () => {
     await page.goto('/');
     await signIn(page);
 
-    await expect(page.locator('#today')).toHaveText('Today: 1 positive, 2 negative, 3 neutral');
+    await expect(page.getByRole('img', { name: 'Today: 1 positive, 2 negative, 3 neutral' })).toBeVisible();
+    await expect(page.locator('#today')).toHaveText('');
     expect(api.todayDates).toEqual(['2026-10-09']);
+  });
+
+  test('is a single line at the top, filled negative, neutral, positive in proportion', async ({ page }) => {
+    const api = await fakeApi(page);
+    api.today.json = { positive: 1, negative: 2, neutral: 3 };
+    await page.goto('/');
+    await signIn(page);
+    await expect(page.locator('#today')).toBeVisible();
+
+    const line = (await page.locator('#today').boundingBox())!;
+    const parts = await page.locator('#today span').evaluateAll((spans) =>
+      spans.map((span) => ({ sentiment: span.className, ...span.getBoundingClientRect().toJSON(), color: getComputedStyle(span).backgroundColor })),
+    );
+    expect(parts.map((part) => part.sentiment)).toEqual(['negative', 'neutral', 'positive']);
+    expect(parts.map((part) => Math.round((part.width / line.width) * 6))).toEqual([2, 3, 1]);
+    expect(parts[0].x).toBeCloseTo(line.x, 0);
+    expect(parts[1].x).toBeCloseTo(parts[0].x + parts[0].width, 0);
+    expect(parts[2].x + parts[2].width).toBeCloseTo(line.x + line.width, 0);
+    for (const part of parts) expect(part.height).toBeCloseTo(line.height, 0);
+    expect(line.height).toBeLessThanOrEqual(8);
+    // Above the form, as the first thing in the app.
+    expect(line.y).toBeLessThan((await page.locator('#log').boundingBox())!.y);
+  });
+
+  test('uses the same colors as the sentiment buttons', async ({ page }) => {
+    const api = await fakeApi(page, [
+      { id: 'n', description: 'Bad', timestamp: '2026-10-02T13:30:00Z', analysis: { sentiment: 'negative' } },
+      { id: 'u', description: 'Meh', timestamp: '2026-10-02T13:31:00Z', analysis: { sentiment: 'neutral' } },
+      { id: 'p', description: 'Good', timestamp: '2026-10-02T13:32:00Z', analysis: { sentiment: 'positive' } },
+    ]);
+    api.today.json = { positive: 1, negative: 1, neutral: 1 };
+    await page.goto('/');
+    await signIn(page);
+
+    for (const [description, sentiment, label] of [['Bad', 'negative', 'Negative'], ['Meh', 'neutral', 'Neutral'], ['Good', 'positive', 'Positive']]) {
+      const button = sentimentButton(page, description, label);
+      await expect(button).toHaveAttribute('aria-pressed', 'true');
+      const buttonColor = await button.evaluate((el) => getComputedStyle(el).backgroundColor);
+      await expect(page.locator(`#today span.${sentiment}`)).toHaveCSS('background-color', buttonColor);
+    }
+  });
+
+  test('with nothing analyzed today, is an empty line', async ({ page }) => {
+    await fakeApi(page);
+    await page.goto('/');
+    await signIn(page);
+
+    await expect(page.getByRole('img', { name: 'Today: 0 positive, 0 negative, 0 neutral' })).toBeVisible();
+    const widths = await page.locator('#today span').evaluateAll((spans) => spans.map((span) => span.getBoundingClientRect().width));
+    expect(widths).toEqual([0, 0, 0]);
   });
 
   test("leaves it out, and still shows the list, when today's counts fail to load", async ({ page }) => {
@@ -431,13 +482,13 @@ test.describe('waiting for analysis', () => {
 
     await page.clock.runFor(5000);
     await expect.poll(() => api.analysisPolls).toEqual([[id]]);
-    await expect(page.locator('#today')).toHaveText('Today: 0 positive, 0 negative, 0 neutral');
+    await expect(page.locator('#today')).toHaveAttribute('aria-label', 'Today: 0 positive, 0 negative, 0 neutral');
 
     api.analyses[id] = { sentiment: 'negative' };
     api.today.json = { positive: 0, negative: 1, neutral: 0 };
     await page.clock.runFor(5000);
 
-    await expect(page.locator('#today')).toHaveText('Today: 0 positive, 1 negative, 0 neutral');
+    await expect(page.locator('#today')).toHaveAttribute('aria-label', 'Today: 0 positive, 1 negative, 0 neutral');
     // Nothing is waiting now, so it stops checking.
     await page.clock.runFor(60_000);
     expect(api.analysisPolls).toHaveLength(2);
@@ -526,12 +577,12 @@ test.describe("each thought's sentiment", () => {
     ]);
     await page.goto('/');
     await signIn(page);
-    await expect(page.locator('#today')).toHaveText('Today: 0 positive, 0 negative, 0 neutral');
+    await expect(page.locator('#today')).toHaveAttribute('aria-label', 'Today: 0 positive, 0 negative, 0 neutral');
     api.today.json = { positive: 1, negative: 0, neutral: 0 };
 
     await sentimentButton(page, 'Analyzed', 'Positive').click();
 
-    await expect(page.locator('#today')).toHaveText('Today: 1 positive, 0 negative, 0 neutral');
+    await expect(page.locator('#today')).toHaveAttribute('aria-label', 'Today: 1 positive, 0 negative, 0 neutral');
     expect(api.sentimentPuts).toEqual([{ id: 'done', sentiment: 'positive' }]);
     await expect(sentimentButton(page, 'Analyzed', 'Positive')).toHaveAttribute('aria-pressed', 'true');
     await expect(sentimentButton(page, 'Analyzed', 'Negative')).toHaveAttribute('aria-pressed', 'false');
@@ -783,7 +834,8 @@ test.describe('looks right', () => {
   });
 
   test('signed in, with thoughts and counts', async ({ page }) => {
-    await fakeApi(page, thoughts, counts);
+    const api = await fakeApi(page, thoughts, counts);
+    api.today.json = { positive: 1, negative: 2, neutral: 1 };
     await page.goto('/');
     await signIn(page);
     await expect(page.getByRole('listitem')).toHaveCount(2);
