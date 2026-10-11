@@ -147,7 +147,7 @@ test('asks for a username and password, then lists thoughts newest first, in loc
   const items = page.getByRole('listitem');
   await expect(items).toHaveCount(2);
   await expect(items.nth(0)).toContainText('Car broke down');
-  await expect(items.nth(0)).toContainText('10/2/2026, 9:05 AM');
+  await expect(items.nth(0).locator('time')).toHaveText('9:05 AM');
   await expect(items.nth(1)).toContainText('Flight delayed');
 });
 
@@ -372,7 +372,7 @@ test('lists thoughts without a description as having no details', async ({ page 
 
   await signIn(page);
 
-  await expect(page.getByRole('listitem')).toContainText('10/1/2026, 1:30 PM');
+  await expect(page.getByRole('listitem').locator('time')).toHaveText('1:30 PM');
   await expect(page.getByRole('listitem')).toContainText('No details');
 });
 
@@ -713,7 +713,7 @@ test.describe('deleting', () => {
 
     await deleteButton(page, 'No details').click();
 
-    await expect.poll(() => message).toBe('Delete the thought from 10/1/2026, 1:30 PM?');
+    await expect.poll(() => message).toBe('Delete the thought from 1:30 PM?');
   });
 });
 
@@ -756,6 +756,27 @@ test('descriptions are shown as text, not HTML', async ({ page }) => {
   await log(page, '<b>bold</b>');
 
   await expect(page.getByRole('listitem')).toContainText('<b>bold</b>');
+});
+
+test('buttons respond to hover', async ({ page, isMobile }) => {
+  test.skip(isMobile, "Phones can't hover, and a tap would leave the button looking hovered, so it's left off there");
+  await fakeApi(page, [{ id: 'done', description: 'Analyzed', timestamp: '2026-10-02T13:30:00Z', analysis: { sentiment: 'negative' } }]);
+  await page.goto('/');
+  await signIn(page);
+  // How it looks: its background, and any filter over it.
+  const look = (button: ReturnType<Page['locator']>) =>
+    button.evaluate((el) => `${getComputedStyle(el).backgroundColor} ${getComputedStyle(el).filter}`);
+
+  for (const button of [
+    page.getByRole('button', { name: 'Log' }),
+    sentimentButton(page, 'Analyzed', 'Positive'),
+    sentimentButton(page, 'Analyzed', 'Negative'),
+    page.getByRole('button', { name: 'Delete' }),
+  ]) {
+    const before = await look(button);
+    await button.hover();
+    expect(await look(button)).not.toBe(before);
+  }
 });
 
 test("asks what's on your mind inside the box, not above it", async ({ page }) => {

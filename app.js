@@ -14,7 +14,8 @@ const byDay = document.getElementById('by-day');
 const patterns = document.getElementById('patterns');
 const patternsError = document.getElementById('patterns-error');
 
-const timeFormat = { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' };
+// The list is only today's, so the time is enough.
+const timeFormat = { hour: 'numeric', minute: '2-digit' };
 
 function show(signedIn) {
   signin.hidden = signedIn;
@@ -231,7 +232,7 @@ async function load() {
     head.className = 'head';
     const time = document.createElement('time');
     time.dateTime = thought.timestamp;
-    time.textContent = new Date(thought.timestamp).toLocaleString(undefined, timeFormat);
+    time.textContent = new Date(thought.timestamp).toLocaleTimeString(undefined, timeFormat);
     const controls = document.createElement('div');
     controls.className = 'controls';
     const text = document.createElement('p');
