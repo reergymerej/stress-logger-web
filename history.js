@@ -51,7 +51,7 @@ function showDays(days) {
     name.textContent = longDate(date);
     const how = document.createElement('span');
     how.className = 'count';
-    how.textContent = `${count} ${count === 1 ? 'thought' : 'thoughts'}`;
+    how.textContent = count;
     const bar = document.createElement('div');
     bar.className = 'sentiment-bar';
     bar.setAttribute('role', 'img');

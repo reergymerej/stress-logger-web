@@ -64,12 +64,12 @@ test.beforeEach(async ({ page }) => {
   await page.clock.setFixedTime(new Date('2026-10-10T16:00:00Z'));
 });
 
-test('lists the days before today, newest first, with how many thoughts each', async ({ page }) => {
+test('lists the days before today, newest first, with just the number of thoughts each', async ({ page }) => {
   await fakeApi(page, days);
   await signedIn(page);
   await page.goto('/history');
 
-  await expect(dayLinks(page)).toHaveText(['Friday, October 9, 2026 3 thoughts', 'Wednesday, October 7, 2026 1 thought']);
+  await expect(dayLinks(page)).toHaveText(['Friday, October 9, 2026 3', 'Wednesday, October 7, 2026 1']);
 });
 
 // A sentiment bar's parts, in order, and how much of the line each one takes.
@@ -119,7 +119,7 @@ test.describe('in New York', () => {
     await signedIn(page);
     await page.goto('/history');
 
-    await expect(dayLinks(page)).toHaveText(['Wednesday, October 7, 2026 1 thought']);
+    await expect(dayLinks(page)).toHaveText(['Wednesday, October 7, 2026 1']);
   });
 });
 

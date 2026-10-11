@@ -758,6 +758,16 @@ test('descriptions are shown as text, not HTML', async ({ page }) => {
   await expect(page.getByRole('listitem')).toContainText('<b>bold</b>');
 });
 
+test("asks what's on your mind inside the box, not above it", async ({ page }) => {
+  await fakeApi(page);
+  await page.goto('/');
+  await signIn(page);
+
+  const box = page.getByRole('textbox', { name: "What's on your mind?" });
+  await expect(box).toHaveAttribute('placeholder', "What's on your mind?");
+  await expect(page.getByText("What's on your mind?")).toHaveCount(0);
+});
+
 test('fits the screen, with touch-friendly controls', async ({ page }) => {
   await fakeApi(page, [{ id: '1', description: 'x'.repeat(300), timestamp: '2026-10-01T13:30:00Z' }]);
   await page.goto('/');
