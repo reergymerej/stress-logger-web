@@ -24,6 +24,7 @@ const files = {
   '/index.html': ['index.html', 'text/html'],
   '/style.css': ['style.css', 'text/css'],
   '/app.js': ['app.js', 'text/javascript'],
+  '/sentiment-bar.js': ['sentiment-bar.js', 'text/javascript'],
   '/history': ['history.html', 'text/html'],
   '/history.html': ['history.html', 'text/html'],
   '/history.js': ['history.js', 'text/javascript'],

@@ -6,6 +6,7 @@ const none = document.getElementById('none');
 const daysList = document.getElementById('days');
 const day = document.getElementById('day');
 const dayName = document.getElementById('day-name');
+const daySentiment = document.getElementById('day-sentiment');
 const thoughtsList = document.getElementById('thoughts');
 
 const date = new URLSearchParams(location.search).get('date');
@@ -43,7 +44,7 @@ async function get(path) {
 function showDays(days) {
   const before = days.filter((d) => d.date < today);
   none.hidden = before.length > 0;
-  daysList.replaceChildren(...before.map(({ date, count }) => {
+  daysList.replaceChildren(...before.map(({ date, count, ...counts }) => {
     const link = document.createElement('a');
     link.href = `?date=${date}`;
     const name = document.createElement('span');
@@ -51,7 +52,11 @@ function showDays(days) {
     const how = document.createElement('span');
     how.className = 'count';
     how.textContent = `${count} ${count === 1 ? 'thought' : 'thoughts'}`;
-    link.append(name, ' ', how);
+    const bar = document.createElement('div');
+    bar.className = 'sentiment-bar';
+    bar.setAttribute('role', 'img');
+    fillSentimentBar(bar, 'Sentiment', counts);
+    link.append(name, ' ', how, bar);
     const item = document.createElement('li');
     item.append(link);
     return item;
@@ -59,8 +64,11 @@ function showDays(days) {
   all.hidden = false;
 }
 
-function showDay(thoughts) {
+// counts is null when they couldn't be loaded, and the line is left out.
+function showDay(thoughts, counts) {
   dayName.textContent = longDate(date);
+  daySentiment.hidden = !counts;
+  if (counts) fillSentimentBar(daySentiment, 'Sentiment', counts);
   thoughtsList.replaceChildren(...thoughts.map((thought) => {
     const head = document.createElement('div');
     head.className = 'head';
@@ -93,14 +101,18 @@ async function load() {
   // The server stops when idle, and waking it up can take a few seconds.
   unreachable.hidden = true;
   loading.hidden = false;
-  const answer = await get(date ? `thoughts?date=${encodeURIComponent(date)}` : 'thoughts/days');
+  const query = date && `date=${encodeURIComponent(date)}`;
+  const [answer, counts] = await Promise.all([
+    get(query ? `thoughts?${query}` : 'thoughts/days'),
+    query && get(`thoughts/sentiment-counts?${query}`),
+  ]);
   if (!localStorage.getItem('credentials')) return;
   loading.hidden = true;
   if (!answer) {
     unreachable.hidden = false;
     return;
   }
-  if (date) showDay(answer);
+  if (date) showDay(answer, counts);
   else showDays(answer);
 }
 

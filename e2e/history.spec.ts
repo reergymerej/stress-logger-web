@@ -6,10 +6,21 @@ const basic = (user: string, password: string) => `Basic ${Buffer.from(`${user}:
 
 type Thought = { id: string; description: string | null; timestamp: string; analysis?: object };
 
-// A stand-in for the API: the days, and each day's thoughts. dates records which days were asked for.
-// down makes the server unreachable, and status makes it answer with that error.
-async function fakeApi(page: Page, days: { date: string; count: number }[] = [], thoughts: Record<string, Thought[]> = {}) {
-  const fake = { dates: [] as string[], down: false, status: 200 };
+type Counts = { positive: number; negative: number; neutral: number };
+type Day = { date: string; count: number } & Counts;
+
+// A stand-in for the API: the days, each day's thoughts, and each day's sentiment counts in sentiment.
+// dates and sentimentDates record which days were asked for. down makes the server unreachable, status makes it
+// answer with that error, and sentimentStatus makes only the sentiment counts fail.
+async function fakeApi(page: Page, days: Day[] = [], thoughts: Record<string, Thought[]> = {}) {
+  const fake = {
+    dates: [] as string[],
+    sentiment: {} as Record<string, Counts>,
+    sentimentDates: [] as string[],
+    sentimentStatus: 200,
+    down: false,
+    status: 200,
+  };
   const headers = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type' };
   const answer = (handle: (url: URL) => object) => async (route: Parameters<Parameters<Page['route']>[1]>[0]) => {
     if (fake.down) return route.abort('connectionrefused');
@@ -27,6 +38,12 @@ async function fakeApi(page: Page, days: { date: string; count: number }[] = [],
     fake.dates.push(date);
     return thoughts[date] ?? [];
   }));
+  await page.route((url) => url.href.startsWith(`${API}/sentiment-counts?date=`), async (route) => {
+    const date = new URL(route.request().url()).searchParams.get('date')!;
+    if (route.request().method() === 'GET') fake.sentimentDates.push(date);
+    if (fake.sentimentStatus !== 200) return route.fulfill({ status: fake.sentimentStatus, headers, json: { error: 'boom' } });
+    return answer(() => ({ date, ...(fake.sentiment[date] ?? { positive: 0, negative: 0, neutral: 0 }) }))(route);
+  });
   return fake;
 }
 
@@ -37,9 +54,9 @@ async function signedIn(page: Page, credentials = 'alice:secret') {
 }
 
 const days = [
-  { date: '2026-10-10', count: 2 },
-  { date: '2026-10-09', count: 3 },
-  { date: '2026-10-07', count: 1 },
+  { date: '2026-10-10', count: 2, positive: 1, negative: 1, neutral: 0 },
+  { date: '2026-10-09', count: 3, positive: 1, negative: 2, neutral: 0 },
+  { date: '2026-10-07', count: 1, positive: 0, negative: 0, neutral: 1 },
 ];
 const dayLinks = (page: Page) => page.locator('#days a');
 
@@ -53,6 +70,44 @@ test('lists the days before today, newest first, with how many thoughts each', a
   await page.goto('/history');
 
   await expect(dayLinks(page)).toHaveText(['Friday, October 9, 2026 3 thoughts', 'Wednesday, October 7, 2026 1 thought']);
+});
+
+// A sentiment bar's parts, in order, and how much of the line each one takes.
+const barParts = (bar: ReturnType<Page['locator']>) =>
+  bar.locator('span').evaluateAll((spans) => spans.map((span) => [span.className, (span as HTMLElement).style.flexGrow]));
+
+test('shows how each day went, as a line filled negative, neutral, positive in proportion', async ({ page }) => {
+  await fakeApi(page, days);
+  await signedIn(page);
+  await page.goto('/history');
+
+  const bars = page.locator('#days').getByRole('img');
+  await expect(bars).toHaveCount(2);
+  await expect(bars.first()).toHaveAttribute('aria-label', 'Sentiment: 1 positive, 2 negative, 0 neutral');
+  expect(await barParts(bars.first())).toEqual([['negative', '2'], ['neutral', '0'], ['positive', '1']]);
+  await expect(bars.last()).toHaveAttribute('aria-label', 'Sentiment: 0 positive, 0 negative, 1 neutral');
+});
+
+test("shows how a day went at its top, like today's on the main page", async ({ page }) => {
+  const api = await fakeApi(page, days);
+  api.sentiment['2026-10-09'] = { positive: 1, negative: 2, neutral: 3 };
+  await signedIn(page);
+  await page.goto('/history?date=2026-10-09');
+
+  const bar = page.getByRole('img', { name: 'Sentiment: 1 positive, 2 negative, 3 neutral' });
+  await expect(bar).toBeVisible();
+  expect(await barParts(bar)).toEqual([['negative', '2'], ['neutral', '3'], ['positive', '1']]);
+  expect(api.sentimentDates).toEqual(['2026-10-09']);
+});
+
+test("leaves the day's line out, and still shows its thoughts, when its counts fail to load", async ({ page }) => {
+  const api = await fakeApi(page, days, { '2026-10-09': [{ id: '1', description: 'Traffic', timestamp: '2026-10-09T08:00:00Z' }] });
+  api.sentimentStatus = 500;
+  await signedIn(page);
+  await page.goto('/history?date=2026-10-09');
+
+  await expect(page.getByText('Traffic')).toBeVisible();
+  await expect(page.locator('#day .sentiment-bar')).toBeHidden();
 });
 
 test.describe('in New York', () => {
@@ -69,7 +124,7 @@ test.describe('in New York', () => {
 });
 
 test('says so when there is nothing before today', async ({ page }) => {
-  await fakeApi(page, [{ date: '2026-10-10', count: 2 }]);
+  await fakeApi(page, [days[0]]);
   await signedIn(page);
   await page.goto('/history');
 
@@ -182,13 +237,14 @@ test.describe('looks right', () => {
   });
 
   test('a day', async ({ page }) => {
-    await fakeApi(page, days, {
+    const api = await fakeApi(page, days, {
       '2026-10-09': [
         { id: '3', description: 'Shipped it', timestamp: '2026-10-09T17:15:00Z', analysis: { sentiment: 'positive' } },
         { id: '2', description: 'Neutral thought', timestamp: '2026-10-09T13:00:00Z', analysis: { sentiment: 'neutral' } },
         { id: '1', description: 'Car broke down on the way to work', timestamp: '2026-10-09T08:00:00Z', analysis: { sentiment: 'negative' } },
       ],
     });
+    api.sentiment['2026-10-09'] = { positive: 1, negative: 1, neutral: 1 };
     await signedIn(page);
     await page.goto('/history?date=2026-10-09');
     await expect(page.locator('#thoughts li')).toHaveCount(3);

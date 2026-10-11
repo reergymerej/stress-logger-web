@@ -58,6 +58,12 @@ a { color: var(--accent); }
 
 #days li { padding: 0; }
 
+#days a { flex-wrap: wrap; row-gap: 0.25rem; padding: 0.5rem 0; }
+
+#days .sentiment-bar { flex-basis: 100%; }
+
+#day-sentiment { margin-bottom: 0.5rem; }
+
 #days .count, #none { color: var(--muted); }
 
 #day h2 { font-size: 1rem; color: inherit; margin: 1rem 0 0.5rem; }
@@ -211,20 +217,21 @@ li .none { color: var(--muted); font-style: italic; }
 
 time { font-size: 0.85rem; color: var(--muted); }
 
-#today {
+.sentiment-bar {
   display: flex;
   height: 6px;
-  margin: 0 0 1rem;
   border-radius: 3px;
   overflow: hidden;
   background: var(--border);
 }
 
-#today span { flex: 0 1 0; }
+#today { margin: 0 0 1rem; }
 
-#today .negative { background: var(--negative); }
+.sentiment-bar span { flex: 0 1 0; }
 
-#today .neutral { background: var(--muted); }
+.sentiment-bar .negative { background: var(--negative); }
 
-#today .positive { background: var(--positive); }
+.sentiment-bar .neutral { background: var(--muted); }
+
+.sentiment-bar .positive { background: var(--positive); }
 

@@ -26,7 +26,7 @@ npm run deploy   # pushes main and waits for the workflow below to pass
 Every push to `main` runs a GitHub Actions workflow that:
 
 1. runs the tests,
-2. publishes `index.html`, `history.html`, `style.css`, `app.js`, `history.js` and `config.js` to GitHub Pages,
+2. publishes `index.html`, `history.html`, `style.css`, `app.js`, `history.js`, `sentiment-bar.js` and `config.js` to GitHub Pages,
 3. smoke-checks the live site (`scripts/smoke.js`): it serves the pages and points at the API.
 
 Live at https://reergymerej.github.io/stress-logger-web/.

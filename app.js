@@ -109,13 +109,7 @@ async function showToday() {
   const counts = res.ok ? await res.json() : null;
   today.hidden = !counts;
   if (!counts) return;
-  today.setAttribute('aria-label', `Today: ${counts.positive} positive, ${counts.negative} negative, ${counts.neutral} neutral`);
-  today.replaceChildren(...['negative', 'neutral', 'positive'].map((sentiment) => {
-    const part = document.createElement('span');
-    part.className = sentiment;
-    part.style.flexGrow = counts[sentiment];
-    return part;
-  }));
+  fillSentimentBar(today, 'Today', counts);
 }
 
 // The server analyzes new thoughts in the background, so check back on ones still waiting, every 5 seconds for a
