@@ -1,6 +1,6 @@
 # Thought Logger Web
 
-The web client for [Thought Logger](https://github.com/reergymerej/stress-logger): log your thoughts, then review the list and counts by hour of day and day of week. Each thought shows its sentiment once the server has analyzed it, and you can change it when the analysis got it wrong. Plain HTML, CSS and JS, mobile-first, with no build step.
+The web client for [Thought Logger](https://github.com/reergymerej/stress-logger): log your thoughts, then review today's, with counts by hour of day and day of week. History (`history`) lists the days before today, and opens each one's thoughts. Each thought shows its sentiment once the server has analyzed it, and you can change it when the analysis got it wrong. Plain HTML, CSS and JS, mobile-first, with no build step.
 
 ## Run
 
@@ -26,8 +26,8 @@ npm run deploy   # pushes main and waits for the workflow below to pass
 Every push to `main` runs a GitHub Actions workflow that:
 
 1. runs the tests,
-2. publishes `index.html`, `style.css`, `app.js` and `config.js` to GitHub Pages,
-3. smoke-checks the live site (`scripts/smoke.js`): it serves the page and points at the API.
+2. publishes `index.html`, `history.html`, `style.css`, `app.js`, `history.js` and `config.js` to GitHub Pages,
+3. smoke-checks the live site (`scripts/smoke.js`): it serves the pages and points at the API.
 
 Live at https://reergymerej.github.io/stress-logger-web/.
 

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>History · Thought Logger</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>History</h1>
+    <a href="./">Today</a>
+  </header>
+
+  <p id="loading" role="status" hidden>Loading… The server can take a few seconds to wake up.</p>
+
+  <div id="unreachable" hidden>
+    <p class="error">Couldn't load it.</p>
+    <button id="retry">Try again</button>
+  </div>
+
+  <main id="all" hidden>
+    <p id="none" hidden>Nothing before today yet.</p>
+    <ul id="days"></ul>
+  </main>
+
+  <main id="day" hidden>
+    <a href="history">All days</a>
+    <h2 id="day-name"></h2>
+    <ul id="thoughts"></ul>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="history.js"></script>
+</body>
+</html>

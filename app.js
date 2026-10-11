@@ -1,6 +1,7 @@
 const signin = document.getElementById('signin');
 const signinError = document.getElementById('signin-error');
 const app = document.getElementById('app');
+const historyLink = document.getElementById('history');
 const loading = document.getElementById('loading');
 const unreachable = document.getElementById('unreachable');
 const form = document.getElementById('log');
@@ -18,6 +19,7 @@ const timeFormat = { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'n
 function show(signedIn) {
   signin.hidden = signedIn;
   app.hidden = !signedIn;
+  historyLink.hidden = !signedIn;
   loading.hidden = true;
   unreachable.hidden = true;
 }

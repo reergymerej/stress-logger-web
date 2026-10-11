@@ -35,7 +35,40 @@ body {
   font: 16px/1.4 system-ui, sans-serif;
 }
 
-h1 { font-size: 1.25rem; margin: 0 0 1rem; }
+h1 { font-size: 1.25rem; margin: 0; }
+
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+a { color: var(--accent); }
+
+#days a {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 44px;
+  align-items: center;
+  text-decoration: none;
+}
+
+#days li { padding: 0; }
+
+#days .count, #none { color: var(--muted); }
+
+#day h2 { font-size: 1rem; color: inherit; margin: 1rem 0 0.5rem; }
+
+.mood { font-size: 0.75rem; margin-left: 0.5rem; }
+
+.mood.negative { color: var(--negative); }
+
+.mood.neutral { color: var(--muted); }
+
+.mood.positive { color: var(--positive); }
 
 form { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.5rem; }
 

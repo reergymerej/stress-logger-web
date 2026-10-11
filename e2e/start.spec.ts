@@ -70,6 +70,8 @@ test('npm start serves only the site files', async () => {
     expect((await fetch(`${server.url}/package.json`)).status).toBe(404);
     expect((await fetch(`${server.url}/style.css`)).headers.get('content-type')).toContain('text/css');
     expect((await fetch(`${server.url}/app.js`)).headers.get('content-type')).toContain('javascript');
+    expect(await (await fetch(`${server.url}/history`)).text()).toContain('<title>History · Thought Logger</title>');
+    expect((await fetch(`${server.url}/history.js`)).headers.get('content-type')).toContain('javascript');
   } finally {
     server.stop();
   }
