@@ -10,15 +10,17 @@ async function start(backend?: string) {
   proc.stderr.on('data', (chunk) => (output += chunk));
   const exited = new Promise<number | null>((resolve) => proc.on('exit', resolve));
   const url = `http://localhost:${port}`;
+  // Waits for the server to say it's listening, however long a busy machine takes to start it, but fails as soon
+  // as it exits, and gives up after 10 seconds.
+  const listening = new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`not serving at ${url} after 10s: ${output}`)), 10_000);
+    proc.stdout.on('data', () => output.includes(`on ${url}`) && (clearTimeout(timer), resolve()));
+    proc.on('exit', (code) => (clearTimeout(timer), reject(new Error(`exited with ${code} before serving: ${output}`))));
+  });
+  listening.catch(() => {});
   const ready = async () => {
-    for (let i = 0; i < 50; i++) {
-      try {
-        return await fetch(url);
-      } catch {
-        await new Promise((r) => setTimeout(r, 50));
-      }
-    }
-    throw new Error(`not serving at ${url}: ${output}`);
+    await listening;
+    return fetch(url);
   };
   return { url, ready, exited, output: () => output, stop: () => proc.kill() };
 }
