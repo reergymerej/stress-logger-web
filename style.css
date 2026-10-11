@@ -60,7 +60,7 @@ a { color: var(--accent); }
 
 #days li { padding: 0; }
 
-#days li, #day li { border-bottom: 0; }
+#days li { border-bottom: 0; }
 
 #days a { flex-wrap: wrap; row-gap: 0.25rem; padding: 0.5rem 0; }
 

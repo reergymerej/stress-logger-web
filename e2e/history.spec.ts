@@ -216,7 +216,7 @@ test("says so when the server answers with an error", async ({ page }) => {
   await expect(page.getByText("Couldn't load it.")).toBeVisible();
 });
 
-test('has no lines between the days, or between the thoughts', async ({ page }) => {
+test("has no lines between the days, but does between a day's thoughts", async ({ page }) => {
   await fakeApi(page, days, { '2026-10-09': [{ id: '1', description: 'Traffic', timestamp: '2026-10-09T08:00:00Z' }] });
   await signedIn(page);
   const borders = (selector: string) =>
@@ -228,7 +228,7 @@ test('has no lines between the days, or between the thoughts', async ({ page }) 
 
   await page.goto('/history?date=2026-10-09');
   await expect(page.locator('#thoughts li')).toHaveCount(1);
-  expect(await borders('#thoughts li')).toEqual(['none']);
+  expect(await borders('#thoughts li')).toEqual(['solid']);
 });
 
 test('fits the screen', async ({ page }) => {
