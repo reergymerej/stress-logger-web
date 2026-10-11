@@ -27,6 +27,8 @@ async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { 
     sentimentStatus: 200,
     today: { status: 200, json: { positive: 0, negative: 0, neutral: 0 } as object },
     todayDates: [] as string[],
+    // The date each list request asked for.
+    listDates: [] as (string | null)[],
     // What GET /analyses answers, by id, and the ids each poll asked for.
     analyses: {} as Record<string, object>,
     analysisPolls: [] as string[][],
@@ -82,7 +84,7 @@ async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { 
     fake.analysisPolls.push(ids);
     return route.fulfill({ headers, json: Object.fromEntries(ids.map((id) => [id, fake.analyses[id] ?? {}])) });
   });
-  await page.route(API, async (route) => {
+  await page.route((url) => url.href === API || url.href.startsWith(`${API}?`), async (route) => {
     if (fake.down) return route.abort('connectionrefused');
     const req = route.request();
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers });
@@ -106,6 +108,7 @@ async function fakeApi(page: Page, thoughts: Thought[] = [], counts: Counts = { 
       if (fake.postFails === 'lost') return route.abort('connectionreset');
       return route.fulfill({ status: 201, headers, json: thought });
     }
+    fake.listDates.push(new URL(req.url()).searchParams.get('date'));
     await fake.listHold;
     return route.fulfill({ headers, json: thoughts });
   });
@@ -390,6 +393,20 @@ test('logging shows it is busy and ignores more submits until done', async ({ pa
   await expect(button).toBeEnabled();
   await expect(button).toHaveText('Log');
   expect(api.posts).toHaveLength(1);
+});
+
+test.describe("today's thoughts", () => {
+  test.use({ timezoneId: 'America/New_York' });
+
+  test('loads only the thoughts from the local day', async ({ page }) => {
+    await page.clock.setFixedTime(new Date('2026-10-10T02:30:00Z')); // Still the 9th in New York.
+    const api = await fakeApi(page);
+    await page.goto('/');
+    await signIn(page);
+
+    await expect(page.getByLabel("What's on your mind?")).toBeVisible();
+    expect(api.listDates).toEqual(['2026-10-09']);
+  });
 });
 
 test.describe("today's sentiment", () => {

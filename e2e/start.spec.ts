@@ -57,7 +57,7 @@ test('npm start with a backend URL sends API requests there', async ({ page }) =
     await page.evaluate(() => localStorage.setItem('credentials', btoa('u:p')));
     await page.reload();
 
-    await expect.poll(() => requests).toContain('https://dev.example/v1/thoughts');
+    await expect.poll(() => requests.some((url) => url.startsWith('https://dev.example/v1/thoughts'))).toBe(true);
   } finally {
     server.stop();
   }

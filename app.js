@@ -213,7 +213,7 @@ async function load() {
   let thoughts, counts;
   try {
     [thoughts, counts] = await Promise.all([
-      api('thoughts').then((res) => res.json()),
+      api(`thoughts?date=${localTimestamp().slice(0, 10)}`).then((res) => res.json()),
       api('thoughts/counts').then((res) => (res.ok ? res.json() : null)),
       showToday(),
     ]);
