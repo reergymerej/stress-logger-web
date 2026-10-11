@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { spawn } from 'node:child_process';
+import { API_URL } from '../scripts/api-url.js';
 
 // Runs `npm start -- <backend>` on a free port, and stops it after the test.
 async function start(backend?: string) {
@@ -28,7 +29,7 @@ async function start(backend?: string) {
 for (const [backend, api] of [
   [undefined, 'http://localhost:3000'],
   ['local', 'http://localhost:3000'],
-  ['prod', 'https://stress-logger-reergymerej.fly.dev'],
+  ['prod', API_URL],
   ['https://dev.example', 'https://dev.example'],
 ]) {
   test(`npm start ${backend ?? '(no backend)'} serves the site, pointed at ${api}`, async () => {

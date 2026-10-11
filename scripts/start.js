@@ -5,8 +5,9 @@ import { createServer } from 'node:http';
 import { watch } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { API_URL } from './api-url.js';
 
-const backends = { local: 'http://localhost:3000', prod: 'https://stress-logger-reergymerej.fly.dev' };
+const backends = { local: 'http://localhost:3000', prod: API_URL };
 const args = process.argv.slice(2);
 const watching = args.includes('--watch');
 const choice = args.find((arg) => arg !== '--watch') ?? 'local';

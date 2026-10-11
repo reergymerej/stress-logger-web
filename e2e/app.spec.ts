@@ -1,7 +1,8 @@
 import { test, expect, type Page } from '@playwright/test';
+import { API_URL } from '../scripts/api-url.js';
 import { randomUUID } from 'node:crypto';
 
-const API = 'https://stress-logger-reergymerej.fly.dev/v1/thoughts';
+const API = `${API_URL}/v1/thoughts`;
 const USER = 'alice';
 const PASSWORD = 'secret';
 const V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;

@@ -1,6 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
+import { API_URL } from '../scripts/api-url.js';
 
-const API = 'https://stress-logger-reergymerej.fly.dev/v1/thoughts';
+const API = `${API_URL}/v1/thoughts`;
 const basic = (user: string, password: string) => `Basic ${Buffer.from(`${user}:${password}`).toString('base64')}`;
 
 type Thought = { id: string; description: string | null; timestamp: string; analysis?: object };
